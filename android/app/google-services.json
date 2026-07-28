@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "123532203037",
+    "firebase_url": "https://smartmist-system-it31-default-rtdb.firebaseio.com",
+    "project_id": "smartmist-system-it31",
+    "storage_bucket": "smartmist-system-it31.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123532203037:android:808b2c51918a4a4bf1a2f4",
+        "android_client_info": {
+          "package_name": "com.it31.smartmist"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkB-PPpPitpQDV5N1BHXsUgr4GJC4nLrg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123532203037:android:3aadc9190082dca0f1a2f4",
+        "android_client_info": {
+          "package_name": "com.smartmist.smartmist_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkB-PPpPitpQDV5N1BHXsUgr4GJC4nLrg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
