@@ -14,13 +14,13 @@ const lightColorScheme = ColorScheme(
 
 const darkColorScheme = ColorScheme(
   brightness: Brightness.dark,
-  primary: Color(0xFF1E88E5), // Vibrant Sky Blue
+  primary: Color(0xFF1E88E5),
   onPrimary: Colors.white,
-  secondary: Color(0xFF00ACC1), // Cool Teal
+  secondary: Color(0xFF00ACC1),
   onSecondary: Colors.white,
   error: Color(0xFFCF6679),
   onError: Colors.black,
-  surface: Color(0xFF07111F), // Dark Navy
+  surface: Color(0xFF07111F),
   onSurface: Colors.white,
 );
 

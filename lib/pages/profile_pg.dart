@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:smartmist_app/widgets/app_notifications.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:smartmist_app/services/notification_service.dart';
+import 'package:smartmist_app/widgets/app_notifications.dart';
 import 'package:smartmist_app/widgets/dashboard_scaffold.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -21,6 +22,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController currentPassController = TextEditingController();
   final TextEditingController newPassController = TextEditingController();
   final TextEditingController confirmPassController = TextEditingController();
+
   bool changePassword = false;
 
   void showEditProfileDialog(
@@ -28,53 +30,50 @@ class _ProfilePageState extends State<ProfilePage> {
     Map<dynamic, dynamic> userData,
     DatabaseReference userRef,
   ) {
+    final size = MediaQuery.of(context).size;
+    final width = size.width;
+
     nameController.text = userData["name"] ?? "";
     emailController.text = userData["email"] ?? "";
-    nameController.clear();
     currentPassController.clear();
     newPassController.clear();
     confirmPassController.clear();
-
     changePassword = false;
+
     bool showCurrentPass = false;
     bool showNewPass = false;
     bool showConfirmPass = false;
 
     showDialog(
       context: context,
-      barrierDismissible: true,
-
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return Dialog(
               backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.all(20),
-
+              insetPadding: EdgeInsets.symmetric(horizontal: width * 0.05),
               child: Container(
-                padding: const EdgeInsets.all(25),
-
+                padding: EdgeInsets.all(width * 0.06),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0288D1).withValues(alpha: 0.90),
-                  borderRadius: BorderRadius.circular(30),
+                  color: const Color(0xFF0288D1).withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(width * 0.08),
                   border: Border.all(color: Colors.white, width: 1.5),
                 ),
 
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-
                     children: [
                       Text(
                         "Edit Profile",
                         style: GoogleFonts.poppins(
                           color: Colors.white,
-                          fontSize: 24,
+                          fontSize: width * 0.06,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
 
-                      const SizedBox(height: 25),
+                      SizedBox(height: width * 0.06),
 
                       TextField(
                         controller: nameController,
@@ -82,7 +81,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         decoration: inputDecoration("Name"),
                       ),
 
-                      const SizedBox(height: 15),
+                      SizedBox(height: width * 0.035),
 
                       TextField(
                         controller: emailController,
@@ -90,7 +89,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         decoration: inputDecoration("Email"),
                       ),
 
-                      const SizedBox(height: 10),
+                      SizedBox(height: width * 0.02),
 
                       CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
@@ -109,7 +108,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
 
                       if (changePassword) ...[
-                        const SizedBox(height: 10),
+                        SizedBox(height: width * 0.02),
 
                         TextField(
                           controller: currentPassController,
@@ -122,7 +121,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                     showCurrentPass
                                         ? CupertinoIcons.eye
                                         : CupertinoIcons.eye_slash,
-
                                     color: Colors.white70,
                                   ),
 
@@ -135,33 +133,19 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                         ),
 
-                        const SizedBox(height: 10),
+                        SizedBox(height: width * 0.025),
 
                         TextField(
                           controller: newPassController,
                           obscureText: !showNewPass,
                           style: const TextStyle(color: Colors.white),
-                          decoration: inputDecoration("New Password").copyWith(
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                showNewPass
-                                    ? CupertinoIcons.eye
-                                    : CupertinoIcons.eye_slash,
-
-                                color: Colors.white70,
-                              ),
-
-                              onPressed: () {
-                                setDialogState(() {
-                                  showNewPass = !showNewPass;
-                                });
-                              },
-                            ),
-                          ),
+                          decoration: inputDecoration("New Password"),
                         ),
+                      ],
 
-                        const SizedBox(height: 10),
+                      SizedBox(height: width * 0.025),
 
+                      if (changePassword)
                         TextField(
                           controller: confirmPassController,
                           obscureText: !showConfirmPass,
@@ -173,10 +157,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                     showConfirmPass
                                         ? CupertinoIcons.eye
                                         : CupertinoIcons.eye_slash,
-
                                     color: Colors.white70,
                                   ),
-
                                   onPressed: () {
                                     setDialogState(() {
                                       showConfirmPass = !showConfirmPass;
@@ -185,58 +167,65 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ),
                               ),
                         ),
-                      ],
 
-                      const SizedBox(height: 25),
+                      SizedBox(height: width * 0.06),
 
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
+
                         children: [
-                          SizedBox(
-                            width: 120,
-                            height: 45,
+                          Expanded(
+                            child: SizedBox(
+                              height: width * 0.12,
 
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white24,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white24,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      width * 0.05,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                },
 
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-
-                              child: const Text(
-                                "Cancel",
-                                style: TextStyle(color: Colors.white),
+                                child: Text(
+                                  "Cancel",
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
 
-                          const SizedBox(width: 15),
+                          SizedBox(width: width * 0.04),
 
-                          SizedBox(
-                            width: 120,
-                            height: 45,
-
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF4FC3F7),
-
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                          Expanded(
+                            child: SizedBox(
+                              height: width * 0.12,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4FC3F7),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      width * 0.05,
+                                    ),
+                                  ),
                                 ),
-                              ),
 
-                              onPressed: () {
-                                saveChanges(userRef);
-                              },
-
-                              child: const Text(
-                                "Save",
-                                style: TextStyle(color: Colors.white),
+                                onPressed: () {
+                                  saveChanges(userRef);
+                                },
+                                child: Text(
+                                  "Save",
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -263,7 +252,6 @@ class _ProfilePageState extends State<ProfilePage> {
         borderRadius: BorderRadius.circular(15),
         borderSide: const BorderSide(color: Colors.white, width: 1.2),
       ),
-
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
         borderSide: const BorderSide(color: Colors.white, width: 2),
@@ -273,7 +261,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> saveChanges(DatabaseReference userRef) async {
     final User? user = FirebaseAuth.instance.currentUser;
-
     if (user == null) return;
 
     try {
@@ -297,7 +284,6 @@ class _ProfilePageState extends State<ProfilePage> {
           );
           return;
         }
-
         await user.updatePassword(newPassController.text.trim());
       }
 
@@ -317,6 +303,11 @@ class _ProfilePageState extends State<ProfilePage> {
         "Profile Updated Successfully",
         icon: Icons.check_circle,
       );
+
+      await NotificationService.show(
+        title: "SMARTMIST",
+        body: "Your profile has been updated successfully.",
+      );
     } catch (e) {
       AppNotification.show(
         context,
@@ -332,34 +323,54 @@ class _ProfilePageState extends State<ProfilePage> {
     required String title,
     required String value,
   }) {
+    final width = MediaQuery.of(context).size.width;
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(18),
+      margin: EdgeInsets.only(bottom: width * 0.035),
+      padding: EdgeInsets.all(width * 0.045),
       decoration: BoxDecoration(
         color: const Color(0xFF0288D1).withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(25),
+          borderRadius: BorderRadius.circular(width * 0.06),
+
         border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
       ),
 
       child: Row(
         children: [
-          Icon(icon, color: Colors.white, size: 30),
+          Icon(icon, color: Colors.white, size: width * 0.075),
 
-          const SizedBox(width: 15),
+          SizedBox(width: width * 0.04),
 
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: GoogleFonts.poppins(color: Colors.white70)),
-              Text(
-                value,
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+
+              children: [
+                Text(
+                  title,
+
+                  style: GoogleFonts.poppins(
+                    color: Colors.white70,
+
+                    fontSize: width * 0.03,
+                  ),
                 ),
-              ),
-            ],
+
+                Text(
+                  value,
+
+                  overflow: TextOverflow.ellipsis,
+
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+
+                    fontWeight: FontWeight.bold,
+
+                    fontSize: width * 0.035,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -368,26 +379,38 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget actionButton({
     required String text,
+
     required IconData icon,
+
     required VoidCallback onTap,
 
     bool danger = false,
   }) {
+    final width = MediaQuery.of(context).size.width;
+
     return SizedBox(
-      width: 160,
-      height: 45,
+      width: width * 0.36,
+
+      height: width * 0.11,
+
       child: ElevatedButton.icon(
-        icon: Icon(icon),
+        icon: Icon(icon, size: width * 0.05),
+
         label: Text(
           text,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+
+            fontSize: width * 0.03,
+          ),
         ),
 
         style: ElevatedButton.styleFrom(
           backgroundColor: danger ? Colors.red : const Color(0xFF4FC3F7),
 
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(width * 0.05),
           ),
         ),
 
@@ -399,9 +422,13 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void dispose() {
     nameController.dispose();
+
     emailController.dispose();
+
     currentPassController.dispose();
+
     newPassController.dispose();
+
     confirmPassController.dispose();
 
     super.dispose();
@@ -409,6 +436,12 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    final width = size.width;
+
+    final height = size.height;
+
     final User? currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
@@ -423,8 +456,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
     return DashboardScaffold(
       title: "Profile",
+
       child: StreamBuilder(
         stream: userRef.onValue,
+
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -434,83 +469,115 @@ class _ProfilePageState extends State<ProfilePage> {
             snapshot.data!.snapshot.value as Map,
           );
 
-          return Column(
-            children: [
-              const SizedBox(height: 25),
+          return SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: width * 0.04),
 
-              const CircleAvatar(
-                radius: 50,
-                backgroundColor: Colors.white24,
-                child: Icon(
-                  CupertinoIcons.person_fill,
-                  size: 50,
-                  color: Colors.white,
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              Text(
-                "Personnel ${userData["name"] ?? ""}",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              profileInfoCard(
-                icon: CupertinoIcons.mail,
-                title: "Email",
-                value: userData["email"] ?? currentUser.email ?? "",
-              ),
-
-              profileInfoCard(
-                icon: CupertinoIcons.lock_shield,
-                title: "Access Level",
-                value: userData["accessLevel"] ?? "control",
-              ),
-
-              const Spacer(),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
                 children: [
-                  actionButton(
-                    text: "Edit",
-                    icon: CupertinoIcons.pencil,
-                    onTap: () {
-                      showEditProfileDialog(context, userData, userRef);
-                    },
+                  SizedBox(height: height * 0.03),
+
+                  CircleAvatar(
+                    radius: width * 0.14,
+
+                    backgroundColor: Colors.white24,
+
+                    child: Icon(
+                      CupertinoIcons.person_fill,
+
+                      size: width * 0.14,
+
+                      color: Colors.white,
+                    ),
                   ),
 
-                  const SizedBox(width: 15),
+                  SizedBox(height: height * 0.025),
 
-                  actionButton(
-                    text: "Logout",
-                    icon: CupertinoIcons.arrow_right_square,
-                    danger: true,
-                    onTap: () async {
-                      await FirebaseAuth.instance.signOut();
+                  Text(
+                    "Personnel ${userData["name"] ?? ""}",
 
-                      AppNotification.show(
-                        context,
-                        "Successfully Logged Out",
-                        icon: CupertinoIcons.checkmark_circle,
-                      );
+                    textAlign: TextAlign.center,
 
-                      Future.delayed(const Duration(seconds: 1), () {
-                        Navigator.popUntil(context, (route) => route.isFirst);
-                      });
-                    },
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+
+                      fontSize: width * 0.065,
+
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
+
+                  SizedBox(height: height * 0.035),
+
+                  profileInfoCard(
+                    icon: CupertinoIcons.mail,
+
+                    title: "Email",
+
+                    value: userData["email"] ?? currentUser.email ?? "",
+                  ),
+
+                  profileInfoCard(
+                    icon: CupertinoIcons.lock_shield,
+
+                    title: "Access Level",
+
+                    value: userData["accessLevel"] ?? "control",
+                  ),
+
+                  SizedBox(height: height * 0.08),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+
+                    children: [
+                      actionButton(
+                        text: "Edit",
+
+                        icon: CupertinoIcons.pencil,
+
+                        onTap: () {
+                          showEditProfileDialog(context, userData, userRef);
+                        },
+                      ),
+
+                      SizedBox(width: width * 0.04),
+
+                      actionButton(
+                        text: "Logout",
+
+                        icon: CupertinoIcons.arrow_right_square,
+
+                        danger: true,
+
+                        onTap: () async {
+                          await FirebaseAuth.instance.signOut();
+
+                          AppNotification.show(
+                            context,
+                            "Successfully Logged Out",
+                            icon: CupertinoIcons.checkmark_circle,
+                          );
+
+                          await NotificationService.show(
+                            title: "SMARTMIST",
+                            body: "You have successfully logged out.",
+                          );
+
+                          Future.delayed(const Duration(seconds: 1), () {
+                            Navigator.popUntil(
+                              context,
+                              (route) => route.isFirst,
+                            );
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: height * 0.03),
                 ],
               ),
-
-              const SizedBox(height: 25),
-            ],
+            ),
           );
         },
       ),

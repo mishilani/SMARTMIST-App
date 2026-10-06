@@ -1,13 +1,14 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:smartmist_app/widgets/app_notifications.dart';
 import 'package:smartmist_app/widgets/dashboard_scaffold.dart';
 import 'package:smartmist_app/widgets/section_card.dart';
 import 'package:smartmist_app/widgets/status_card.dart';
-import 'package:smartmist_app/widgets/glass_container.dart';
-import 'package:smartmist_app/services/log_service.dart';
-import 'package:smartmist_app/widgets/app_notifications.dart';
+import 'package:smartmist_app/widgets/animated_water_tank.dart';
+import 'dart:async';
+import 'package:smartmist_app/services/notification_service.dart';
 
 class WaterManagementPage extends StatefulWidget {
   final bool isAdmin;
@@ -21,20 +22,13 @@ class WaterManagementPage extends StatefulWidget {
 class _WaterManagementPageState extends State<WaterManagementPage> {
   final DatabaseReference db = FirebaseDatabase.instance.ref();
 
-  double waterLevel = 0;
-  double waterTemp = 0;
+  bool waterAvailable = false;
+  double? waterTemp;
   double peltierThreshold = 30;
 
-  String pumpStatus = "OFF";
-  String peltierStatus = "OFF";
-
-  bool manualPump = false;
-  bool manualPeltier = false;
-
-  bool savedPump = false;
-  bool savedPeltier = false;
-
-  bool isSaving = false;
+  bool peltierOn = false;
+  bool? _previousWaterAvailable;
+  StreamSubscription<DatabaseEvent>? _waterSubscription;
 
   @override
   void initState() {
@@ -42,133 +36,129 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
     listenWaterData();
   }
 
+  @override
+  void dispose() {
+    _waterSubscription?.cancel();
+    super.dispose();
+  }
+
   void listenWaterData() {
-    db.onValue.listen((event) {
+    _waterSubscription = db.onValue.listen((event) {
       final value = event.snapshot.value;
 
       if (value != null && value is Map) {
         final data = Map<Object?, Object?>.from(value);
 
-        final sensors = Map<Object?, Object?>.from(
-          (data["Sensors"] as Map?) ?? {},
+        final sensor = Map<Object?, Object?>.from(
+          (data["sensor"] as Map?) ?? {},
         );
 
         final status = Map<Object?, Object?>.from(
-          (data["Status"] as Map?) ?? {},
+          (data["status"] as Map?) ?? {},
         );
 
         final controls = Map<Object?, Object?>.from(
-          (data["Controls"] as Map?) ?? {},
+          (data["controls"] as Map?) ?? {},
         );
 
         setState(() {
-          waterLevel =
-              double.tryParse(sensors["waterLevel"]?.toString() ?? "0") ?? 0;
+          waterAvailable = sensor["waterAvailable"] == true;
 
-          waterTemp =
-              double.tryParse(sensors["waterTemp"]?.toString() ?? "0") ?? 0;
+          final rawWaterTemp = double.tryParse(
+            sensor["waterTemperature"]?.toString() ?? "",
+          );
+          waterTemp = (rawWaterTemp == null || rawWaterTemp <= -50)
+              ? null
+              : rawWaterTemp;
 
-          pumpStatus = status["pump"]?.toString().toUpperCase() ?? "OFF";
-
-          peltierStatus = status["peltier"]?.toString().toUpperCase() ?? "OFF";
+          peltierOn = status["peltier"] == true;
 
           peltierThreshold =
               double.tryParse(
                 controls["peltierThreshold"]?.toString() ?? "30",
               ) ??
               30;
-
-          manualPump = controls["manualPump"] == true;
-
-          manualPeltier = controls["manualPeltier"] == true;
-
-          savedPump = manualPump;
-          savedPeltier = manualPeltier;
         });
+
+        _checkLowWaterAlert();
       }
     });
   }
 
-  String getWaterStatus() {
-    if (waterLevel <= 20) {
-      return "Low Water Level";
-    } else if (waterLevel <= 50) {
-      return "Medium Level";
+  void _checkLowWaterAlert() {
+    final wasAvailable = _previousWaterAvailable;
+    final isAvailable = waterAvailable;
+
+    if (wasAvailable == true && isAvailable == false) {
+      _showLowWaterAlert();
     }
 
-    return "Water Level Normal";
+    _previousWaterAvailable = isAvailable;
+  }
+
+  Future<void> _showLowWaterAlert() async {
+    if (!mounted) return;
+
+    AppNotification.show(
+      context,
+      "Low water! Please refill the tank.",
+      color: Colors.redAccent,
+      icon: CupertinoIcons.exclamationmark_triangle_fill,
+    );
+
+    await NotificationService.show(
+      title: "SMARTMIST",
+      body:
+          "Water level is low. Please refill the tank to keep misting active.",
+    );
+  }
+
+  String getWaterStatus() {
+    return waterAvailable ? "Water Level Normal" : "Low / No Water Detected";
   }
 
   Color getWaterColor() {
-    if (waterLevel <= 20) {
-      return Colors.redAccent;
-    } else if (waterLevel <= 50) {
-      return Colors.orangeAccent;
-    }
-
-    return Colors.cyanAccent;
+    return waterAvailable ? Colors.cyanAccent : Colors.redAccent;
   }
 
   String getTemperatureStatus() {
-    if (waterTemp >= peltierThreshold) {
+    if (waterTemp == null) {
+      return "No Sensor";
+    }
+    if (waterTemp! >= peltierThreshold) {
       return "Cooling Required";
     }
-
     return "Normal Temperature";
   }
 
   Color getTemperatureColor() {
-    if (waterTemp >= peltierThreshold) {
+    if (waterTemp == null) {
+      return Colors.white70;
+    }
+    if (waterTemp! >= peltierThreshold) {
       return Colors.orangeAccent;
     }
-
     return Colors.greenAccent;
   }
 
-  Future<void> updateWaterSettings() async {
-    setState(() {
-      isSaving = true;
-    });
-
-    try {
-      await db.child("Controls").update({
-        "manualPump": manualPump,
-        "manualPeltier": manualPeltier,
-        "updatedAt": ServerValue.timestamp,
-      });
-
-      await LogService.addLog(
-        action: "Update",
-        category: "Water Management",
-        description: "Updated water system controls",
-        oldValue:
-            "Pump ${savedPump ? "ON" : "OFF"}, "
-            "Peltier ${savedPeltier ? "ON" : "OFF"}",
-        newValue:
-            "Pump ${manualPump ? "ON" : "OFF"}, "
-            "Peltier ${manualPeltier ? "ON" : "OFF"}",
-      );
-
-      setState(() {
-        savedPump = manualPump;
-        savedPeltier = manualPeltier;
-      });
-
-      AppNotification.show(
-        context,
-        "Water settings updated",
-        color: Colors.green,
-        icon: CupertinoIcons.checkmark_circle_fill,
-      );
-    } finally {
-      setState(() {
-        isSaving = false;
-      });
+  bool getDisplayedPeltierOn() {
+    if (waterTemp == null) {
+      return peltierOn;
     }
+    final waterIsColdEnough = waterTemp! < peltierThreshold;
+    if (!waterIsColdEnough) {
+      return true;
+    }
+    return peltierOn;
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final width = size.width;
+    final height = size.height;
+    final displayedPeltierOn = getDisplayedPeltierOn();
+
     return DashboardScaffold(
       title: "Water Management",
       subtitle: "Monitor water storage and cooling system",
@@ -178,7 +168,7 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
           behavior: const ScrollBehavior().copyWith(scrollbars: false),
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: EdgeInsets.symmetric(vertical: height * 0.008),
               child: Column(
                 children: [
                   StatusCard(
@@ -196,98 +186,48 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
                         ? Colors.greenAccent
                         : Colors.orangeAccent,
                   ),
-
-                  const SizedBox(height: 8),
-
+                  SizedBox(height: height * 0.012),
                   SectionCard(
                     color: const Color(0xFF01579B).withValues(alpha: 0.35),
                     icon: CupertinoIcons.drop_fill,
-                    title: "Water Tank Level",
-                    subtitle: "Current available water capacity",
+                    title: "Water Tank",
+                    subtitle:
+                        "Float switch status (no fill-level sensor installed)",
                     child: SizedBox(
-                      height: 140,
+                      height: height * 0.18,
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Expanded(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Text(
-                                  "${waterLevel.isFinite ? waterLevel.toInt() : 0}%",
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                Icon(
+                                  waterAvailable
+                                      ? CupertinoIcons.checkmark_seal_fill
+                                      : CupertinoIcons.xmark_seal_fill,
+                                  color: getWaterColor(),
+                                  size: width * 0.11,
                                 ),
+                                SizedBox(height: height * 0.008),
                                 Text(
                                   getWaterStatus(),
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.poppins(
                                     color: getWaterColor(),
-                                    fontSize: 11,
+                                    fontSize: width * 0.032,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-
                           Expanded(
                             child: Center(
-                              child: SizedBox(
-                                height: 180,
-                                child: Stack(
-                                  alignment: Alignment.bottomCenter,
-                                  children: [
-                                    AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 500,
-                                      ),
-                                      height:
-                                          (waterLevel.clamp(0, 100) / 100) *
-                                          105,
-                                      width: 120,
-                                      decoration: BoxDecoration(
-                                        color: getWaterColor().withValues(
-                                          alpha: 0.75,
-                                        ),
-                                        borderRadius:
-                                            const BorderRadius.vertical(
-                                              bottom: Radius.circular(15),
-                                            ),
-                                      ),
-                                    ),
-
-                                    Container(
-                                      height: 140,
-                                      width: 95,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: Colors.white,
-                                          width: 3,
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-
-                                    Positioned(
-                                      top: 2,
-                                      child: Container(
-                                        height: 12,
-                                        width: 45,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white70,
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              child: AnimatedWaterTank(
+                                isFilled: waterAvailable,
+                                width: width * 0.20,
+                                height: height * 0.17,
+                                color: getWaterColor(),
                               ),
                             ),
                           ),
@@ -295,11 +235,9 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 8),
-
+                  SizedBox(height: height * 0.012),
                   SizedBox(
-                    height: 160,
+                    height: height * 0.20,
                     child: Row(
                       children: [
                         Expanded(
@@ -311,38 +249,33 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
                             title: "Water Temp",
                             subtitle: "Tank temperature",
                             child: Center(
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      "${waterTemp.isFinite ? waterTemp.toInt() : 0}°C",
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: 25,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    waterTemp == null
+                                        ? "--°C"
+                                        : "${waterTemp!.toInt()}°C",
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: width * 0.065,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                    Text(
-                                      getTemperatureStatus(),
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.poppins(
-                                        color: getTemperatureColor(),
-                                        fontSize: 14,
-                                      ),
+                                  ),
+                                  Text(
+                                    getTemperatureStatus(),
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.poppins(
+                                      color: getTemperatureColor(),
+                                      fontSize: width * 0.030,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
-
-                        const SizedBox(width: 8),
-
+                        SizedBox(width: width * 0.02),
                         Expanded(
                           child: SectionCard(
                             color: const Color(
@@ -352,33 +285,26 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
                             title: "Cooling",
                             subtitle: "Peltier system",
                             child: Center(
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      peltierStatus,
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: 25,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    displayedPeltierOn ? "ON" : "OFF",
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: width * 0.065,
+                                      fontWeight: FontWeight.bold,
                                     ),
-
-                                    Text(
-                                      "Threshold "
-                                      "${peltierThreshold.toInt()}°C",
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white70,
-                                        fontSize: 14,
-                                      ),
+                                  ),
+                                  Text(
+                                    "Threshold ${peltierThreshold.toInt()}°C",
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white70,
+                                      fontSize: width * 0.03,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -386,168 +312,7 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 8),
-
-                  SectionCard(
-                    color: const Color(0xFF01579B).withValues(alpha: 0.35),
-                    icon: CupertinoIcons.speedometer,
-                    title: "Pump Status",
-                    subtitle: "Water circulation system",
-                    child: GlassContainer(
-                      color: Colors.white.withValues(alpha: 0.20),
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            CupertinoIcons.drop_fill,
-                            color: pumpStatus == "ON"
-                                ? Colors.cyanAccent
-                                : Colors.white70,
-                            size: 28,
-                          ),
-
-                          const SizedBox(width: 10),
-
-                          Text(
-                            "Pump: $pumpStatus",
-                            style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  if (widget.isAdmin)
-                    SectionCard(
-                      color: const Color(0xFF01579B).withValues(alpha: 0.35),
-                      icon: CupertinoIcons.slider_horizontal_3,
-                      title: "Manual Controls",
-                      subtitle: "Override system operation",
-                      child: Column(
-                        children: [
-                          SwitchListTile(
-                            title: Text(
-                              "Manual Pump",
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
-                            ),
-                            value: manualPump,
-                            activeColor: Colors.cyanAccent,
-                            onChanged: (value) {
-                              setState(() {
-                                manualPump = value;
-                              });
-                            },
-                          ),
-
-                          SwitchListTile(
-                            title: Text(
-                              "Manual Peltier",
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
-                            ),
-                            value: manualPeltier,
-                            activeColor: Colors.cyanAccent,
-                            onChanged: (value) {
-                              setState(() {
-                                manualPeltier = value;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  const SizedBox(height: 15),
-
-                  SizedBox(
-                    width: 200,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: isSaving ? null : updateWaterSettings,
-
-                      icon: isSaving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(
-                              CupertinoIcons.checkmark_alt_circle_fill,
-                              color: Colors.white,
-                            ),
-
-                      label: Text(
-                        isSaving ? "SAVING..." : "SAVE CHANGES",
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-
-                      style: ButtonStyle(
-                        backgroundColor: WidgetStateProperty.resolveWith<Color>(
-                          (states) {
-                            if (states.contains(WidgetState.disabled)) {
-                              return const Color(
-                                0xFF4FC3F7,
-                              ).withValues(alpha: 0.20);
-                            }
-
-                            if (states.contains(WidgetState.hovered)) {
-                              return const Color(0xFF81D4FA);
-                            }
-
-                            if (states.contains(WidgetState.pressed)) {
-                              return const Color(0xFF0288D1);
-                            }
-
-                            return const Color(0xFF4FC3F7);
-                          },
-                        ),
-                        elevation: WidgetStateProperty.resolveWith<double>((
-                          states,
-                        ) {
-                          if (states.contains(WidgetState.hovered)) {
-                            return 12;
-                          }
-
-                          return 6;
-                        }),
-
-                        shadowColor: WidgetStateProperty.all(
-                          Colors.black.withValues(alpha: 0.25),
-                        ),
-
-                        overlayColor: WidgetStateProperty.all(
-                          const Color(0xFF4FC3F7).withValues(alpha: 0.15),
-                        ),
-                        shape: WidgetStateProperty.all(
-                          RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 5),
+                  SizedBox(height: height * 0.01),
                 ],
               ),
             ),

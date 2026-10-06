@@ -8,6 +8,7 @@ import 'package:smartmist_app/widgets/status_card.dart';
 import 'package:smartmist_app/widgets/glass_container.dart';
 import 'package:smartmist_app/services/log_service.dart';
 import 'package:smartmist_app/widgets/app_notifications.dart';
+import 'package:smartmist_app/services/notification_service.dart';
 
 class HeatThresholdPage extends StatefulWidget {
   final bool isAdmin;
@@ -31,7 +32,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
   }
 
   void listenHeatSettings() {
-    db.child("Controls").onValue.listen((event) {
+    db.child("controls").onValue.listen((event) {
       final value = event.snapshot.value;
 
       if (value != null && value is Map) {
@@ -140,7 +141,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
     try {
       final oldValue = savedHeatThreshold;
 
-      await db.child("Controls").update({
+      await db.child("controls").update({
         "heatIndexThreshold": heatIndexThreshold.toInt(),
         "updatedAt": ServerValue.timestamp,
       });
@@ -163,6 +164,12 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
         color: Colors.green,
         icon: CupertinoIcons.checkmark_circle_fill,
       );
+
+      await NotificationService.show(
+        title: "SMARTMIST",
+        body:
+            "Heat Index Threshold updated to ${heatIndexThreshold.toInt()}°C.",
+      );
     } finally {
       setState(() {
         isSaving = false;
@@ -172,6 +179,10 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final width = size.width;
+    final height = size.height;
+
     return DashboardScaffold(
       title: "Heat Index Threshold Settings",
 
@@ -203,12 +214,12 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                     : Colors.orangeAccent,
               ),
 
-              const SizedBox(height: 10),
+              SizedBox(height: height * 0.012),
 
               SectionCard(
                 color: const Color(0xFF01579B).withValues(alpha: 0.35),
                 icon: CupertinoIcons.thermometer_sun,
-                title: "Heat Index Trigger",
+                title: "Activation Temperature",
                 subtitle: "Set heat level before warning activation",
 
                 child: Column(
@@ -217,7 +228,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                       "${heatIndexThreshold.toInt()}°C",
                       style: GoogleFonts.poppins(
                         color: Colors.white,
-                        fontSize: 34,
+                        fontSize: width * 0.085,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -226,11 +237,11 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                       "Activation Heat Index",
                       style: GoogleFonts.poppins(
                         color: Colors.white70,
-                        fontSize: 11,
+                        fontSize: width * 0.028,
                       ),
                     ),
 
-                    const SizedBox(height: 10),
+                    SizedBox(height: height * 0.012),
 
                     Slider(
                       value: heatIndexThreshold,
@@ -255,14 +266,14 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                           "❄ Normal\n27°C",
                           style: GoogleFonts.poppins(
                             color: Colors.white70,
-                            fontSize: 10,
+                            fontSize: width * 0.025,
                           ),
                         ),
 
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 7,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: width * 0.03,
+                            vertical: height * 0.008,
                           ),
 
                           decoration: BoxDecoration(
@@ -278,7 +289,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                               Icon(
                                 getHeatIcon(),
                                 color: getHeatColor(),
-                                size: 17,
+                                size: width * 0.045,
                               ),
 
                               const SizedBox(width: 6),
@@ -288,7 +299,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                                 style: GoogleFonts.poppins(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 10,
+                                  fontSize: width * 0.025,
                                 ),
                               ),
                             ],
@@ -300,7 +311,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                           textAlign: TextAlign.right,
                           style: GoogleFonts.poppins(
                             color: Colors.white70,
-                            fontSize: 10,
+                            fontSize: width * 0.025,
                           ),
                         ),
                       ],
@@ -309,7 +320,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                 ),
               ),
 
-              const SizedBox(height: 10),
+              SizedBox(height: height * 0.012),
 
               SectionCard(
                 color: const Color(0xFF01579B).withValues(alpha: 0.35),
@@ -320,7 +331,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                   children: [
                     GlassContainer(
                       color: Colors.white.withValues(alpha: 0.18),
-                      padding: const EdgeInsets.all(12),
+                      padding: EdgeInsets.all(width * 0.03),
 
                       child: Row(
                         children: [
@@ -334,7 +345,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                             child: Icon(
                               getSavedHeatIcon(),
                               color: getSavedHeatColor(),
-                              size: 24,
+                              size: width * 0.06,
                             ),
                           ),
 
@@ -347,7 +358,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                                 "Heat Index Threshold",
                                 style: GoogleFonts.poppins(
                                   color: Colors.white70,
-                                  fontSize: 10,
+                                  fontSize: width * 0.025,
                                 ),
                               ),
 
@@ -355,7 +366,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                                 "${savedHeatThreshold.toInt()}°C",
                                 style: GoogleFonts.poppins(
                                   color: Colors.white,
-                                  fontSize: 16,
+                                  fontSize: width * 0.04,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -365,7 +376,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                       ),
                     ),
 
-                    const SizedBox(height: 8),
+                    SizedBox(height: height * 0.01),
 
                     GlassContainer(
                       color: Colors.white.withValues(alpha: 0.18),
@@ -385,7 +396,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                             child: Icon(
                               getCurrentStatusIcon(),
                               color: getSavedHeatColor(),
-                              size: 24,
+                              size: width * 0.06,
                             ),
                           ),
 
@@ -398,7 +409,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                                 "Current Heat Status",
                                 style: GoogleFonts.poppins(
                                   color: Colors.white70,
-                                  fontSize: 10,
+                                  fontSize: width * 0.025,
                                 ),
                               ),
 
@@ -406,7 +417,7 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                                 getSavedHeatStatus(),
                                 style: GoogleFonts.poppins(
                                   color: Colors.white,
-                                  fontSize: 16,
+                                  fontSize: width * 0.04,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -419,60 +430,64 @@ class _HeatThresholdPageState extends State<HeatThresholdPage> {
                 ),
               ),
 
-              const SizedBox(height: 15),
+              SizedBox(height: height * 0.018),
 
-              SizedBox(
-                width: 200,
-                height: 55,
-                child: ElevatedButton.icon(
-                  onPressed: isSaving ? null : updateSettings,
-                  icon: isSaving
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+              if (widget.isAdmin)
+                SizedBox(
+                  width: width * 0.55,
+                  height: height * 0.065,
+
+                  child: ElevatedButton.icon(
+                    onPressed: isSaving ? null : updateSettings,
+
+                    icon: isSaving
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(
+                            CupertinoIcons.checkmark_alt_circle_fill,
                             color: Colors.white,
+                            size: 22,
                           ),
-                        )
-                      : const Icon(
-                          CupertinoIcons.checkmark_alt_circle_fill,
-                          color: Colors.white,
-                          size: 22,
+
+                    label: Text(
+                      isSaving ? "SAVING..." : "SAVE CHANGES",
+
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: width * 0.032,
+                      ),
+                    ),
+
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStateProperty.all(
+                        const Color(0xFF4FC3F7),
+                      ),
+
+                      elevation: WidgetStateProperty.all(8),
+
+                      shadowColor: WidgetStateProperty.all(
+                        Colors.black.withValues(alpha: 0.25),
+                      ),
+
+                      overlayColor: WidgetStateProperty.all(
+                        Colors.white.withValues(alpha: 0.15),
+                      ),
+
+                      shape: WidgetStateProperty.all(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
                         ),
-
-                  label: Text(
-                    isSaving ? "SAVING..." : "SAVE CHANGES",
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-
-                  style: ButtonStyle(
-                    backgroundColor: WidgetStateProperty.all(
-                      const Color(0xFF4FC3F7),
-                    ),
-
-                    elevation: WidgetStateProperty.all(8),
-
-                    shadowColor: WidgetStateProperty.all(
-                      Colors.black.withValues(alpha: 0.25),
-                    ),
-
-                    overlayColor: WidgetStateProperty.all(
-                      Colors.white.withValues(alpha: 0.15),
-                    ),
-
-                    shape: WidgetStateProperty.all(
-                      RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
                       ),
                     ),
                   ),
                 ),
-              ),
 
               const SizedBox(height: 10),
             ],

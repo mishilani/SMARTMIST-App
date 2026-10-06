@@ -1,32 +1,34 @@
-import 'package:flutter/material.dart';
-import 'package:smartmist_app/pages/signin_pg.dart';
-import 'package:smartmist_app/widgets/custom_scaffold.dart';
-import 'package:smartmist_app/widgets/app_notifications.dart';
-import 'package:smartmist_app/widgets/welcome_btn.dart';
-import 'package:smartmist_app/pages/dashboard.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:smartmist_app/pages/dashboard.dart';
+import 'package:smartmist_app/pages/signin_pg.dart';
+import 'package:smartmist_app/widgets/app_notifications.dart';
+import 'package:smartmist_app/widgets/custom_scaffold.dart';
+import 'package:smartmist_app/widgets/welcome_btn.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final width = size.width;
+    final height = size.height;
+
     return CustomScaffold(
       showBackButton: false,
-      child: Column(
-        children: [
-          Flexible(
-            flex: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                vertical: 0,
-                horizontal: 40.0,
-              ),
-              child: Center(
+      child: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              flex: 6,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: width * 0.08),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
+                    SizedBox(height: height * 0.07),
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(50),
@@ -38,25 +40,17 @@ class WelcomeScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 60),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(50),
-                              child: Image.asset(
-                                'assets/images/logo.jpg',
-                                width: 170,
-                                height: 170,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ],
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(50),
+                        child: Image.asset(
+                          'assets/images/logo.jpg',
+                          width: width * 0.42,
+                          height: width * 0.42,
+                          fit: BoxFit.cover,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: height * 0.015),
                     RichText(
                       textAlign: TextAlign.center,
                       text: TextSpan(
@@ -64,18 +58,18 @@ class WelcomeScreen extends StatelessWidget {
                           TextSpan(
                             text: 'SMARTMIST\n',
                             style: GoogleFonts.poppins(
-                              fontSize: 36,
+                              fontSize: width * 0.085,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 1.5,
                               color: Colors.white,
-                              height: 2,
+                              height: 1.8,
                             ),
                           ),
                           TextSpan(
                             text:
                                 'Real-time heat monitoring and automated misting for a more comfortable commute.',
                             style: GoogleFonts.poppins(
-                              fontSize: 15,
+                              fontSize: width * 0.035,
                               height: 1.5,
                               fontWeight: FontWeight.w400,
                               color: const Color(0xB3FFFFFF),
@@ -88,27 +82,28 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-          Flexible(
-            flex: 4,
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 30, right: 30, bottom: 10),
-                child: Transform.translate(
-                  offset: const Offset(0, -70),
+            Expanded(
+              flex: 4,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: width * 0.08,
+                    vertical: height * 0.025,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         'Choose how you would like to continue',
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          color: Color(0xFF07111F),
+                          fontSize: width * 0.038,
+                          color: const Color(0xFF07111F),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      SizedBox(height: height * 0.025),
                       SizedBox(
                         width: double.infinity,
                         child: WelcomeBtn(
@@ -138,7 +133,7 @@ class WelcomeScreen extends StatelessWidget {
                           textColor: const Color(0xFF07111F),
                         ),
                       ),
-                      const SizedBox(height: 15),
+                      SizedBox(height: height * 0.018),
                       SizedBox(
                         width: double.infinity,
                         child: WelcomeBtn(
@@ -163,23 +158,21 @@ class WelcomeScreen extends StatelessWidget {
                           textColor: const Color(0xFF07111F),
                         ),
                       ),
+                      SizedBox(height: height * 0.025),
+                      Text(
+                        'SMARTMIST IT31',
+                        style: GoogleFonts.poppins(
+                          fontSize: width * 0.03,
+                          color: const Color(0xFF546E7A),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
             ),
-          ),
-          Padding(
-            padding: EdgeInsets.only(bottom: 20),
-            child: Text(
-              'SMARTMIST IT31',
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Color(0xFF546E7A),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

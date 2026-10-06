@@ -15,29 +15,55 @@ class HourlyWeatherCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    final double cardWidth = size.width * 0.20;
+    final double iconSize = size.width * 0.14;
+
     return Container(
-      width: 85,
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+      width: cardWidth,
+
+      padding: EdgeInsets.symmetric(
+        vertical: size.height * 0.008,
+        horizontal: size.width * 0.015,
+      ),
+
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.20),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
+
+        borderRadius: BorderRadius.circular(size.width * 0.055),
+
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.30),
+          width: size.width * 0.002,
+        ),
       ),
+
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+
         children: [
           Text(
             time,
-            style: GoogleFonts.poppins(color: Colors.white, fontSize: 10),
+
+            maxLines: 1,
+
+            overflow: TextOverflow.ellipsis,
+
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: size.width * 0.025,
+            ),
           ),
 
-          SizedBox(width: 60, height: 60, child: icon),
+          SizedBox(width: iconSize, height: iconSize, child: icon),
 
           Text(
             temp,
+
             style: GoogleFonts.poppins(
               color: Colors.white,
-              fontSize: 15,
+              fontSize: size.width * 0.038,
               fontWeight: FontWeight.w600,
             ),
           ),

@@ -20,40 +20,74 @@ class WelcomeBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    final double borderRadius = size.width * 0.05;
+    final double iconSize = size.width * 0.055;
+    final double fontSize = size.width * 0.035;
+
     return Material(
       color: Colors.transparent,
+
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(borderRadius),
+
         onTap: onTap,
+
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(borderRadius),
+
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            filter: ImageFilter.blur(
+              sigmaX: size.width * 0.025,
+              sigmaY: size.width * 0.025,
+            ),
+
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 18),
+              width: double.infinity,
+
+              padding: EdgeInsets.symmetric(
+                vertical: size.height * 0.02,
+                horizontal: size.width * 0.05,
+              ),
+
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
+
+                borderRadius: BorderRadius.circular(borderRadius),
+
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+
+                    blurRadius: size.width * 0.025,
+
+                    offset: Offset(0, size.height * 0.005),
                   ),
                 ],
               ),
+
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+
                 children: [
-                  Icon(icon, size: 22, color: textColor),
+                  Icon(icon, size: iconSize, color: textColor),
 
-                  const SizedBox(width: 10),
+                  SizedBox(width: size.width * 0.025),
 
-                  Text(
-                    btnText,
-                    style: GoogleFonts.poppins(
-                      color: textColor,
-                      fontWeight: FontWeight.w600,
+                  Flexible(
+                    child: Text(
+                      btnText,
+
+                      maxLines: 1,
+
+                      overflow: TextOverflow.ellipsis,
+
+                      style: GoogleFonts.poppins(
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: fontSize,
+                      ),
                     ),
                   ),
                 ],

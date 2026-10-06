@@ -1,13 +1,13 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:intl/intl.dart';
 import 'package:smartmist_app/models/weather_model.dart';
 import 'package:smartmist_app/services/weather_service.dart';
+import 'package:smartmist_app/widgets/daily_forecast_card.dart';
 import 'package:smartmist_app/widgets/dashboard_scaffold.dart';
 import 'package:smartmist_app/widgets/glass_container.dart';
-import 'package:smartmist_app/widgets/daily_forecast_card.dart';
 import 'package:smartmist_app/widgets/weather_lottie_icon.dart';
-import 'package:intl/intl.dart';
 
 class Next7daysPage extends StatefulWidget {
   const Next7daysPage({super.key});
@@ -25,205 +25,224 @@ class _Next7daysPageState extends State<Next7daysPage> {
   @override
   void initState() {
     super.initState();
-
     loadWeather();
   }
 
   Future<void> loadWeather() async {
     final result = await weatherService.getWeather();
-
     setState(() {
       weather = result;
-
       isLoading = false;
     });
   }
 
-  String getWeatherAnimation(int code) {
-    switch (code) {
-      case 0:
-        return "clear-day";
+  bool _isThunderCode(int c) => c == 95 || c == 96 || c == 99;
 
-      case 1:
-      case 2:
-        return "partly-cloudy-day";
+  bool _isRainCode(int c) =>
+      const [51, 53, 55, 61, 63, 65, 80, 81, 82].contains(c);
 
-      case 3:
-      case 45:
-      case 48:
-        return "overcast";
+  bool _isOvercastCode(int c) => c == 3 || c == 45 || c == 48;
 
-      case 51:
-      case 53:
-      case 55:
-      case 61:
-      case 63:
-      case 65:
-      case 80:
-      case 81:
-      case 82:
-        return "rain";
+  String getWeatherAnimation(int code, double heatValue) {
+    if (_isThunderCode(code)) {
+      return "thunderstorms-overcast-rain";
+    }
+    if (_isRainCode(code)) {
+      return "rain";
+    }
+    if (_isOvercastCode(code)) {
+      return "overcast";
+    }
 
-      case 95:
-      case 96:
-      case 99:
-        return "thunderstorms-overcast-rain";
-
-      default:
-        return "overcast";
+    if (heatValue >= 51) {
+      return "clear-day";
+    } else if (heatValue >= 39) {
+      return "clear-day";
+    } else if (heatValue >= 32) {
+      return "clear-day";
+    } else if (code == 0) {
+      return "clear-day";
+    } else {
+      return "partly-cloudy-day";
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final width = size.width;
+    final height = size.height;
+
     return DashboardScaffold(
       title: "Next 7 Days",
       subtitle: "Bacolor Weather Forecast",
       showBackButton: true,
       child: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? Center(
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: width * 0.008,
+              ),
+            )
           : weather == null
           ? const Center(
               child: Text(
                 "Failed to load weather",
-
                 style: TextStyle(color: Colors.white),
               ),
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          : Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: width * 0.03,
+                vertical: height * 0.015,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: height * 0.015),
+                  Builder(
+                    builder: (context) {
+                      final featuredHeatIndex = calculatedHeatIndex(
+                        weather!.daily[2].temp,
+                        weather!.daily[2].humidity.round(),
+                      );
 
-              children: [
-                const SizedBox(height: 15),
-
-                GlassContainer(
-                  borderRadius: 30,
-                  color: Colors.white.withValues(alpha: 0.25),
-                  child: SizedBox(
-                    height: 220,
-                    child: Padding(
-                      padding: const EdgeInsetsGeometry.all(5),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Transform.translate(
-                            offset: const Offset(0, -5),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      return GlassContainer(
+                        borderRadius: width * 0.07,
+                        color: Colors.white.withValues(alpha: 0.25),
+                        child: SizedBox(
+                          height: height * 0.28,
+                          child: Padding(
+                            padding: EdgeInsets.all(width * 0.02),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  DateFormat("EEEE").format(
-                                    DateTime.now().add(const Duration(days: 2)),
-                                  ),
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      DateFormat("EEEE").format(
+                                        DateTime.now().add(
+                                          const Duration(days: 2),
+                                        ),
+                                      ),
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontSize: width * 0.045,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    WeatherLottieIcon(
+                                      weather: getWeatherAnimation(
+                                        weather!.daily[2].weatherCode,
+                                        featuredHeatIndex,
+                                      ),
+                                      size: width * 0.18,
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: height * 0.005),
+                                Center(
+                                  child: Text(
+                                    "${weather!.daily[2].temp.round()}°C",
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: width * 0.12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
-
-                                WeatherLottieIcon(
-                                  weather: getWeatherAnimation(
-                                    weather!.daily[2].weatherCode,
-                                  ),
-                                  size: 70,
+                                const Spacer(),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    Expanded(
+                                      child: weatherSmallCard(
+                                        CupertinoIcons.drop_fill,
+                                        "${weather!.daily[2].humidity.round()}%",
+                                        "Humidity",
+                                      ),
+                                    ),
+                                    SizedBox(width: width * 0.02),
+                                    Expanded(
+                                      child: weatherSmallCard(
+                                        CupertinoIcons.thermometer,
+                                        "${featuredHeatIndex.round()}°C",
+                                        "Heat Index",
+                                      ),
+                                    ),
+                                    SizedBox(width: width * 0.02),
+                                    Expanded(
+                                      child: weatherSmallCard(
+                                        CupertinoIcons.sun_max_fill,
+                                        "${weather!.daily[2].temp.round()}°C",
+                                        "Temperature",
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
+                        ),
+                      );
+                    },
+                  ),
+                  SizedBox(height: height * 0.018),
+                  Flexible(
+                    child: ScrollConfiguration(
+                      behavior: const ScrollBehavior().copyWith(
+                        scrollbars: false,
+                      ),
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        itemCount: weather!.daily.length - 3,
+                        itemBuilder: (context, index) {
+                          final day = weather!.daily[index + 3];
+                          final date = DateTime.now().add(
+                            Duration(days: index + 3),
+                          );
+                          final dayName = DateFormat("EEEE").format(date);
+                          final dayHeatIndex = calculatedHeatIndex(
+                            day.temp,
+                            day.humidity.round(),
+                          );
 
-                          const SizedBox(height: 0),
-
-                          Center(
-                            child: Text(
-                              "${weather!.daily[2].temp.round()}°C",
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 45,
-                                fontWeight: FontWeight.bold,
+                          return Padding(
+                            padding: EdgeInsets.only(bottom: height * 0.015),
+                            child: DailyForecastCard(
+                              day: dayName,
+                              temp: "${day.temp.round()}°C",
+                              humidity: "${day.humidity.round()}%",
+                              heatIndex: "${dayHeatIndex.round()}°C",
+                              icon: getWeatherAnimation(
+                                day.weatherCode,
+                                dayHeatIndex,
                               ),
                             ),
-                          ),
-
-                          const Spacer(),
-
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              weatherSmallCard(
-                                CupertinoIcons.drop_fill,
-                                "${weather!.daily[2].humidity.round()}%",
-                                "Humidity",
-                              ),
-
-                              weatherSmallCard(
-                                CupertinoIcons.thermometer,
-                                "${calculatedHeatIndex(weather!.daily[2].temp, weather!.daily[2].humidity.round()).round()}°C",
-                                "Heat Index",
-                              ),
-
-                              weatherSmallCard(
-                                CupertinoIcons.sun_max_fill,
-                                "${weather!.daily[2].temp.round()}°C",
-                                "Temperature",
-                              ),
-                            ],
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     ),
                   ),
-                ),
-
-                const SizedBox(height: 15),
-
-                Expanded(
-                  child: ScrollConfiguration(
-                    behavior: const ScrollBehavior().copyWith(
-                      scrollbars: false,
-                    ),
-
-                    child: ListView.builder(
-                      itemCount: weather!.daily.length - 3,
-
-                      itemBuilder: (context, index) {
-                        final day = weather!.daily[index + 3];
-                        final date = DateTime.now().add(
-                          Duration(days: index + 3),
-                        );
-                        final dayName = DateFormat("EEEE").format(date);
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-
-                          child: DailyForecastCard(
-                            day: dayName,
-                            temp: "${day.temp.round()}°C",
-                            humidity: "${day.humidity.round()}%",
-                            heatIndex:
-                                "${calculatedHeatIndex(day.temp, day.humidity.round()).round()}°C",
-                            icon: getWeatherAnimation(day.weatherCode),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }
 
   Widget weatherSmallCard(IconData icon, String value, String label) {
-    return Container(
-      width: 85,
-      height: 75,
+    final width = MediaQuery.of(context).size.width;
 
+    return Container(
+      height: width * 0.22,
+      padding: EdgeInsets.symmetric(horizontal: width * 0.01),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(width * 0.05),
         border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
-
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -232,26 +251,31 @@ class _Next7daysPageState extends State<Next7daysPage> {
           ),
         ],
       ),
-
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: const Color(0xFF0288D1), size: 22),
-
-          const SizedBox(height: 3),
-
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
+          Icon(icon, color: const Color(0xFF0288D1), size: width * 0.06),
+          SizedBox(height: width * 0.01),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: width * 0.038,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-
-          Text(
-            label,
-            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: Colors.white70,
+                fontSize: width * 0.025,
+              ),
+            ),
           ),
         ],
       ),
@@ -262,7 +286,7 @@ class _Next7daysPageState extends State<Next7daysPage> {
     // Convert Celsius to Fahrenheit
     double tempF = (tempC * 9 / 5) + 32;
 
-    // NOAA Heat Index formula
+    // NOAA Heat Index Formula
     double heatIndexF =
         -42.379 +
         2.04901523 * tempF +
@@ -274,7 +298,6 @@ class _Next7daysPageState extends State<Next7daysPage> {
         0.00085282 * tempF * humidity * humidity -
         0.00000199 * tempF * tempF * humidity * humidity;
 
-    // Convert Fahrenheit back to Celsius
     double heatIndexC = (heatIndexF - 32) * 5 / 9;
 
     return heatIndexC;

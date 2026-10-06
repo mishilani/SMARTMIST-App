@@ -20,9 +20,16 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    final double iconBoxSize = size.width * 0.12;
+    final double iconSize = size.width * 0.055;
+
     return GlassContainer(
-      borderRadius: 30,
+      borderRadius: size.width * 0.075,
+
       color: color ?? Colors.white.withValues(alpha: 0.20),
+
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
 
@@ -30,17 +37,21 @@ class SectionCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                width: iconBoxSize,
+                height: iconBoxSize,
+
+                alignment: Alignment.center,
 
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.20),
-                  borderRadius: BorderRadius.circular(18),
+
+                  borderRadius: BorderRadius.circular(size.width * 0.045),
                 ),
 
-                child: Icon(icon, color: Colors.white, size: 24),
+                child: Icon(icon, color: Colors.white, size: iconSize),
               ),
 
-              const SizedBox(width: 12),
+              SizedBox(width: size.width * 0.03),
 
               Expanded(
                 child: Column(
@@ -49,9 +60,14 @@ class SectionCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
+
+                      maxLines: 1,
+
+                      overflow: TextOverflow.ellipsis,
+
                       style: GoogleFonts.poppins(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: size.width * 0.04,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -59,9 +75,14 @@ class SectionCard extends StatelessWidget {
                     if (subtitle != null)
                       Text(
                         subtitle!,
+
+                        maxLines: 2,
+
+                        overflow: TextOverflow.ellipsis,
+
                         style: GoogleFonts.poppins(
                           color: Colors.white.withValues(alpha: 0.75),
-                          fontSize: 10,
+                          fontSize: size.width * 0.025,
                         ),
                       ),
                   ],
@@ -70,7 +91,7 @@ class SectionCard extends StatelessWidget {
             ],
           ),
 
-          const SizedBox(height: 15),
+          SizedBox(height: size.height * 0.018),
 
           child,
         ],

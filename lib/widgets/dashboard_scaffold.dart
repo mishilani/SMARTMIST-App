@@ -17,14 +17,27 @@ class DashboardScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    final double horizontalPadding = size.width * 0.06;
+    final double topPadding = size.height * 0.045;
+
+    final double titleSize = size.width * 0.065;
+    final double subtitleSize = size.width * 0.035;
+    final double backIconSize = size.width * 0.05;
+
     return Scaffold(
       extendBody: true,
       resizeToAvoidBottomInset: true,
 
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
+
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF81D4FA), Color(0xFF0288D1)],
+
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -32,9 +45,16 @@ class DashboardScaffold extends StatelessWidget {
 
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(25, 35, 25, 0),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              topPadding,
+              horizontalPadding,
+              0,
+            ),
+
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -46,22 +66,25 @@ class DashboardScaffold extends StatelessWidget {
                           Navigator.pop(context);
                         },
 
-                        child: const Icon(
+                        child: Icon(
                           Icons.arrow_back_ios,
-                          color: Color(0xFF263238),
-                          size: 20,
+                          color: const Color(0xFF263238),
+                          size: backIconSize,
                         ),
                       ),
 
-                    if (showBackButton) const SizedBox(width: 8),
+                    if (showBackButton) SizedBox(width: size.width * 0.02),
 
                     Expanded(
                       child: Text(
                         title,
+
                         maxLines: 1,
+
                         overflow: TextOverflow.ellipsis,
+
                         style: GoogleFonts.poppins(
-                          fontSize: 25,
+                          fontSize: titleSize,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF263238),
                         ),
@@ -71,18 +94,24 @@ class DashboardScaffold extends StatelessWidget {
                 ),
 
                 if (subtitle != null) ...[
-                  const SizedBox(height: 6),
+                  SizedBox(height: size.height * 0.008),
 
                   Text(
                     subtitle!,
+
+                    maxLines: 2,
+
+                    overflow: TextOverflow.ellipsis,
+
                     style: GoogleFonts.poppins(
-                      fontSize: 14,
+                      fontSize: subtitleSize,
                       color: const Color(0xFF455A64),
                     ),
                   ),
                 ],
 
-                const SizedBox(height: 0),
+                SizedBox(height: size.height * 0.005),
+
                 Expanded(child: child),
               ],
             ),

@@ -22,50 +22,76 @@ class StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    final double iconSize = size.width * 0.075;
+    final double iconPadding = size.width * 0.025;
+
     return GlassContainer(
       color: color.withValues(alpha: 0.45),
+
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(iconPadding),
+
             decoration: BoxDecoration(
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(15),
+
+              borderRadius: BorderRadius.circular(size.width * 0.04),
             ),
 
-            child: Icon(icon, color: iconColor ?? Colors.white, size: 30),
+            child: Icon(icon, color: iconColor ?? Colors.white, size: iconSize),
           ),
 
-          const SizedBox(width: 12),
+          SizedBox(width: size.width * 0.03),
 
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+
               children: [
                 Text(
                   title,
+
+                  maxLines: 1,
+
+                  overflow: TextOverflow.ellipsis,
+
                   style: GoogleFonts.poppins(
                     color: Colors.white70,
-                    fontSize: 11,
+                    fontSize: size.width * 0.028,
                   ),
                 ),
 
-                const SizedBox(height: 2),
+                SizedBox(height: size.height * 0.003),
 
                 Text(
                   value,
+
+                  maxLines: 1,
+
+                  overflow: TextOverflow.ellipsis,
+
                   style: GoogleFonts.poppins(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: size.width * 0.045,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
 
                 Text(
                   label,
+
+                  maxLines: 2,
+
+                  overflow: TextOverflow.ellipsis,
+
                   style: GoogleFonts.poppins(
                     color: Colors.white70,
-                    fontSize: 9,
+                    fontSize: size.width * 0.023,
                   ),
                 ),
               ],
@@ -73,10 +99,13 @@ class StatusCard extends StatelessWidget {
           ),
 
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            width: size.width * 0.08,
+            height: size.height * 0.02,
+
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.20),
-              borderRadius: BorderRadius.circular(20),
+
+              borderRadius: BorderRadius.circular(size.width * 0.05),
             ),
           ),
         ],

@@ -20,16 +20,25 @@ class DailyForecastCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    final double cardHeight = size.height * 0.10;
+    final double horizontalPadding = size.width * 0.05;
+    final double iconSize = size.width * 0.15;
+
     return Container(
       width: double.infinity,
-      height: 80,
+      height: cardHeight,
 
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding,
+        vertical: size.height * 0.012,
+      ),
 
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.12),
 
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(size.width * 0.08),
 
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.25),
@@ -39,8 +48,8 @@ class DailyForecastCard extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            blurRadius: size.width * 0.03,
+            offset: Offset(0, size.height * 0.008),
           ),
         ],
       ),
@@ -48,32 +57,32 @@ class DailyForecastCard extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Transform.translate(
-              offset: Offset(10, 0),
-              child: Text(
-                day,
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
+            child: Text(
+              day,
+
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: size.width * 0.04,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
 
           Text(
             temp,
+
             style: GoogleFonts.poppins(
               color: Colors.white,
-              fontSize: 15,
+              fontSize: size.width * 0.04,
               fontWeight: FontWeight.bold,
             ),
           ),
 
           SizedBox(
-            width: 70,
-            height: 70,
-            child: WeatherLottieIcon(weather: icon, size: 70),
+            width: iconSize,
+            height: iconSize,
+
+            child: WeatherLottieIcon(weather: icon, size: iconSize),
           ),
         ],
       ),

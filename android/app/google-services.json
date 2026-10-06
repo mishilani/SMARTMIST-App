@@ -1,22 +1,22 @@
 {
   "project_info": {
-    "project_number": "123532203037",
-    "firebase_url": "https://smartmist-system-it31-default-rtdb.firebaseio.com",
-    "project_id": "smartmist-system-it31",
-    "storage_bucket": "smartmist-system-it31.firebasestorage.app"
+    "project_number": "155991770829",
+    "firebase_url": "https://smartmist-it31-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "smartmist-it31",
+    "storage_bucket": "smartmist-it31.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123532203037:android:808b2c51918a4a4bf1a2f4",
+        "mobilesdk_app_id": "1:155991770829:android:a46b577cc9b0f656444b84",
         "android_client_info": {
-          "package_name": "com.it31.smartmist"
+          "package_name": "com.example.smart_mist"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAkB-PPpPitpQDV5N1BHXsUgr4GJC4nLrg"
+          "current_key": "AIzaSyB49vyl7s_RTNAVavpdnjp9kPGpBbCMM3U"
         }
       ],
       "services": {
@@ -27,7 +27,26 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123532203037:android:3aadc9190082dca0f1a2f4",
+        "mobilesdk_app_id": "1:155991770829:android:ceefc55ebfb3a0aa444b84",
+        "android_client_info": {
+          "package_name": "com.example.smartmist_system"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB49vyl7s_RTNAVavpdnjp9kPGpBbCMM3U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:155991770829:android:b71062c3ef09eac4444b84",
         "android_client_info": {
           "package_name": "com.smartmist.smartmist_app"
         }
@@ -35,7 +54,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAkB-PPpPitpQDV5N1BHXsUgr4GJC4nLrg"
+          "current_key": "AIzaSyB49vyl7s_RTNAVavpdnjp9kPGpBbCMM3U"
         }
       ],
       "services": {

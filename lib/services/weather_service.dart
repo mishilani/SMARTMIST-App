@@ -28,10 +28,22 @@ class WeatherService {
 
       List<HourlyWeather> hourlyToday = [];
       List<HourlyWeather> hourlyTomorrow = [];
-      DateTime now = DateTime.now();
+
+      DateTime now = DateTime.parse(current["time"]);
+
+      DateTime nextHour = DateTime(now.year, now.month, now.day, now.hour + 1);
+
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
 
       for (int i = 0; i < hourly["time"].length; i++) {
         DateTime forecastTime = DateTime.parse(hourly["time"][i]);
+
+        final forecastDay = DateTime(
+          forecastTime.year,
+          forecastTime.month,
+          forecastTime.day,
+        );
 
         HourlyWeather item = HourlyWeather(
           time: formatTime(forecastTime),
@@ -39,13 +51,21 @@ class WeatherService {
           weatherCode: hourly["weather_code"][i],
         );
 
-        if (forecastTime.day == now.day && forecastTime.isAfter(now)) {
+        if (forecastDay.isAtSameMomentAs(today) &&
+            !forecastTime.isBefore(nextHour)) {
           hourlyToday.add(item);
-        } else if (forecastTime.day != now.day) {
+        } else if (forecastDay.isAtSameMomentAs(tomorrow)) {
           hourlyTomorrow.add(item);
         }
+        // any day beyond tomorrow is intentionally ignored —
+        // only used for the separate 7-day daily forecast
       }
 
+      print("========== TODAY ==========");
+
+      for (final h in hourlyToday) {
+        print(h.time);
+      }
       List<DailyWeather> dailyList = [];
 
       for (int i = 0; i < daily["time"].length; i++) {
