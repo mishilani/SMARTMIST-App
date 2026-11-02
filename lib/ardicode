@@ -1,0 +1,1017 @@
+#include <WiFi.h>
+#include <time.h>
+#include <Firebase_ESP_Client.h>
+
+#include <DHT.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// ============================================================
+// SMARTMIST ESP32-S3  -  2-ZONE COMPARISON VERSION (v8)
+//
+//   ZONE 1 = MISTED   : DHT22 (GPIO 6)  + misting pump
+//   ZONE 2 = CONTROL  : DHT22 (GPIO 11) only, for comparison
+//
+// - Zone 1 heat index >= 42 -> pump starts; <= 39 -> pump stops
+// - Pump pulses 15 s ON / 5 s OFF while misting
+// - Float switch: tank empty -> pump will NOT start (checked every 1 s);
+//   if it empties while running, the pump stops after a short debounce
+// - Peltiers (x2) + fans (x2) switch together, only when tank water
+//   is warm (>= 30 C, stop at 28 C). Same thresholds whether the pump is
+//   running or not (see COOL_DURING_MIST).
+// - On mist START and STOP both DHT22s are read together and stored in
+//   /logs/m_<epochSec> (before, after, duration, comparison)
+// - Logs are buffered, uploaded when WiFi returns
+// - AUTO / MANUAL mode (MANUAL uses /controls/zone1Command)
+// - 3 WiFi networks with automatic failover
+// - v8: WiFi, time and Firebase start in the background. Outputs and
+//   AUTO control run immediately at power-up, with or without WiFi.
+//
+// 4-CH RELAY (5 A, active LOW): K1 -> PUMP, K2 -> BOTH fans (in parallel)
+//                               (K3-K4 unused)
+// 30 A RELAYS (2 x 1-channel): Relay A -> Peltier 1, Relay B -> Peltier 2
+// ============================================================
+
+
+// ============================================================
+// 1. WIFI + FIREBASE
+// ============================================================
+
+const int WIFI_COUNT = 3;
+const char *WIFI_SSIDS[WIFI_COUNT] = {"iPhone", "GlobeAtHome_0ABC2", "wifi"};
+const char *WIFI_PASSWORDS[WIFI_COUNT] = {"123456789", "cortez1919", "12345678"};
+
+const unsigned long WIFI_TRY_MS = 10000;
+
+#define API_KEY      "AIzaSyBnY5023rHlC4cefOhI-YQWEa7gZBdO5kc"
+#define DATABASE_URL "https://smartmist-it31-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+// 1 = on boot, delete old 3-zone leftovers from Firebase
+#define CLEAN_LEGACY_ON_BOOT 1
+
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+
+
+// ============================================================
+// 2. SETTINGS
+// ============================================================
+
+const float MIST_START_HI = 42.0;   // zone 1 starts misting at/above this heat index
+const float MIST_STOP_HI = 39.0;   // zone 1 stops misting at/below this heat index
+
+// Pump pulsing: 15 s ON, 5 s OFF
+const bool PUMP_CONTINUOUS = false;   // false = pulse
+const unsigned long PUMP_ON_MS = 15000;
+const unsigned long PUMP_OFF_MS = 5000;
+
+// Peltier + fan cooling of the tank water (both switch together)
+const float COOL_START_C = 30.0;
+const float COOL_STOP_C = 28.0;
+
+const unsigned long COOL_MAX_ON_MS = 30UL * 1000UL;        // each burst: 30 s
+const unsigned long COOL_REST_MS = 20UL * 1000UL;        // rest between bursts: 20 s
+const unsigned long COOL_DAILY_BUDGET_MS = 8UL * 60UL * 1000UL;  // max 8 min ON per 24 h
+
+const unsigned long FAN_RUNON_MS = 0;   // fans keep running this long after Peltiers stop
+
+// Cooling while the pump is misting:
+// 1 = the SAME thresholds apply whether the pump is running or not
+//     (start at COOL_START_C, stop at COOL_STOP_C), so the pump, Peltiers and
+//     fans can run together.
+// 0 = pump has priority: Peltiers and fans never run while misting.
+#define COOL_DURING_MIST 1
+
+// Float switch debounce (the float is read once per second)
+//   LOW_READS_IDLE    : pump NOT running -> tank counts as empty after this many
+//                       low reads, so the pump is blocked from starting almost at once
+//   LOW_READS_RUNNING : pump running -> needs this many low reads in a row before
+//                       it is cut, so sloshing water does not stop it by mistake
+#define LOW_READS_IDLE     1
+#define LOW_READS_RUNNING  10
+
+// MANUAL mode: 1 = stop misting if the device loses contact with Firebase
+// for COMMS_TIMEOUT. 0 = keep the last command until contact returns.
+#define MANUAL_STOP_ON_COMMS_LOSS 0
+
+// 1 = when misting ends because the target heat index was reached, let the
+// pump finish its current 15 s ON pulse instead of cutting it short.
+// Safety stops (tank low, sensor fail, manual STOP) always cut it immediately.
+#define PUMP_FINISH_PULSE 1
+
+
+// ============================================================
+// 3. PINS
+// ============================================================
+
+const int DHT_PINS[2] = {6, 11};
+#define DHT_TYPE DHT22
+
+// 0 = only zone 1 installed (no comparison data), 1 = zone 2 DHT22 installed
+#define ZONE2_INSTALLED 1
+const int NZONES = ZONE2_INSTALLED ? 2 : 1;
+
+#define FLOAT_PIN      7     // INPUT_PULLUP: HIGH = water present, LOW = tank low
+#define FLOAT_FULL_PIN -1
+#define DS18B20_PIN    8
+
+// 4-channel relay module (5 A, ACTIVE LOW) - K1 = pump, K2 = both fans
+#define PUMP_RELAY 4         // K1
+#define FAN_RELAY  5         // K2 (both fans wired in parallel) - change to the GPIO you wired
+const int RELAY4_ON = LOW;
+const int RELAY4_OFF = HIGH;
+
+// 2 x 1-channel 30 A relay modules (Peltiers only)
+#define PELTIER1_RELAY 10
+#define PELTIER2_RELAY 14
+// If your 30 A modules turn ON when the pin is HIGH, swap these two values.
+const int PELT_ON = LOW;
+const int PELT_OFF = HIGH;
+
+
+// ============================================================
+// 4. OBJECTS
+// ============================================================
+
+DHT *dhts[2];
+
+OneWire oneWire(DS18B20_PIN);
+DallasTemperature waterSensor(&oneWire);
+
+
+// ============================================================
+// 5. STATE
+// ============================================================
+
+struct Zone {
+    float temperature = 0;
+    float humidity = 0;
+    float heatIndex = 0;
+    bool sensorOk = false;
+    int failCount = 0;
+    int highCount = 0;
+};
+
+Zone zones[2];                 // [0] = misted, [1] = control
+
+volatile bool misting = false;
+volatile bool pumpFinish = false;   // finishing the last ON pulse after a normal stop
+String mistCommand = "OFF";    // /controls/zone1Command
+int mistLogIdx = -1;
+
+String systemMode = "AUTO";
+String lastMode = "AUTO";
+
+volatile bool waterAvailable = false;
+bool tankFull = false;
+int lowCount = 0;
+
+volatile bool pumpRunning = false;
+volatile bool coolingRunning = false;     // both Peltiers together
+volatile bool fansRunning = false;
+unsigned long fanOffAt = 0;
+
+unsigned long coolStartMs = 0;
+unsigned long coolRestUntil = 0;
+unsigned long coolBudgetUsedMs = 0;
+unsigned long coolWindowStart = 0;
+unsigned long coolLastTick = 0;
+
+float waterTemperature = -127.0;
+String waterTemperatureCondition = "NO SENSOR";
+
+// WiFi
+int wifiIdx = 0;
+bool wifiTrying = false;
+unsigned long wifiAttemptStart = 0;
+
+// Time + Firebase background startup
+bool fbStarted = false;
+bool legacyCleaned = false;
+bool ntpConfigured = false;
+unsigned long lastFbTry = 0;
+const unsigned long FB_RETRY_MS = 5000;
+
+unsigned long lastControlCheck = 0;
+unsigned long lastSensorSend = 0;
+unsigned long lastControlOk = 0;
+unsigned long lastDhtRead = 0;
+
+const unsigned long CONTROL_INTERVAL = 1000;
+const unsigned long SENSOR_INTERVAL = 4000;
+const unsigned long COMMS_TIMEOUT = 15000;
+const unsigned long DHT_STALE_MS = 2500;
+const int DHT_MAX_FAILS = 3;
+
+
+// ============================================================
+// 6. MIST LOG BUFFER
+// ============================================================
+// state: 0 = free, 1 = running, 2 = finished (waiting for upload)
+
+#define MAX_LOGS 20
+
+struct Snap {
+    bool ok = false;
+    float t = 0;
+    float h = 0;
+    float hi = 0;
+};
+
+struct LogEntry {
+    uint8_t state = 0;
+    uint64_t startedAt = 0;
+    uint64_t endedAt = 0;
+    unsigned long startMs = 0;
+    unsigned long endMs = 0;
+    unsigned long durationSec = 0;
+    Snap mistBefore, ctrlBefore;
+    Snap mistAfter, ctrlAfter;
+    bool startUploaded = false;
+    char reason[16] = "";
+    char mode[8] = "";
+    char key[28] = "";
+};
+
+LogEntry logs[MAX_LOGS];
+
+
+// ============================================================
+// 7. DECLARATIONS
+// ============================================================
+
+void wifiMaintain();
+
+void netMaintain();
+
+void cleanLegacy();
+
+uint64_t nowEpochMs();
+
+void readDHTs();
+
+void readWaterTemperature();
+
+void readWaterLevel();
+
+String getWaterTemperatureCondition(float temp);
+
+void readFastControls();
+
+void controlSystem();
+
+void controlMisting();
+
+void controlCooling();
+
+void applyOutputs();
+
+void outputTask(void *param);
+
+Snap snapOf(int i);
+
+void snapshotRefresh();
+
+void startMist();
+
+void stopMist(const char *reason);
+
+int allocLog();
+
+void flushLogs();
+
+void addSnap(FirebaseJson &j, const String &prefix, const Snap &s);
+
+void sendSensorData();
+
+void printSystemStatus();
+
+int pendingLogs();
+
+
+// ============================================================
+// SETUP  - nothing here waits for WiFi or Firebase
+// ============================================================
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+
+    Serial.println();
+    Serial.println("========================================");
+    Serial.println("  SMARTMIST ESP32-S3 - 2 ZONE COMPARISON");
+    Serial.println("========================================");
+
+    // everything OFF first
+    digitalWrite(PUMP_RELAY, RELAY4_OFF);
+    digitalWrite(FAN_RELAY, RELAY4_OFF);
+    pinMode(PUMP_RELAY, OUTPUT);
+    pinMode(FAN_RELAY, OUTPUT);
+    digitalWrite(PUMP_RELAY, RELAY4_OFF);
+    digitalWrite(FAN_RELAY, RELAY4_OFF);
+
+    digitalWrite(PELTIER1_RELAY, PELT_OFF);
+    digitalWrite(PELTIER2_RELAY, PELT_OFF);
+    pinMode(PELTIER1_RELAY, OUTPUT);
+    pinMode(PELTIER2_RELAY, OUTPUT);
+    digitalWrite(PELTIER1_RELAY, PELT_OFF);
+    digitalWrite(PELTIER2_RELAY, PELT_OFF);
+
+    pinMode(FLOAT_PIN, INPUT_PULLUP);
+#if FLOAT_FULL_PIN >= 0
+    pinMode(FLOAT_FULL_PIN, INPUT_PULLUP);
+#endif
+
+    for (int i = 0; i < NZONES; i++) {
+        dhts[i] = new DHT(DHT_PINS[i], DHT_TYPE);
+        dhts[i]->begin();
+    }
+    waterSensor.begin();
+
+    WiFi.mode(WIFI_STA);
+
+    // initial readings so AUTO mode can act on the first loop pass
+    readWaterLevel();
+    readDHTs();
+    readWaterTemperature();
+    lastControlOk = millis();
+
+    // Pump timing + Peltier/fan bursts run in their own task on core 0, so
+    // slow WiFi/Firebase calls in loop() can never stretch the 15 s / 5 s timing.
+    xTaskCreatePinnedToCore(outputTask, "outputs", 4096, NULL, 2, NULL, 0);
+
+    // WiFi, time sync and Firebase sign-in are handled in loop()
+    // by wifiMaintain() and netMaintain().
+
+    Serial.println();
+    Serial.println("SMARTMIST SYSTEM READY (network connecting in background)");
+    Serial.println("========================================");
+}
+
+
+// ============================================================
+// LOOP  - control never waits for WiFi/Firebase
+// ============================================================
+
+void loop() {
+    unsigned long now = millis();
+
+    wifiMaintain();
+    netMaintain();
+
+    // ---------------- FAST PATH (1 s) ----------------
+    if (now - lastControlCheck >= CONTROL_INTERVAL) {
+        lastControlCheck = now;
+
+        readWaterLevel();
+
+        if (fbStarted && Firebase.ready())
+            readFastControls();
+
+        controlSystem();
+    }
+
+    // ---------------- SLOW PATH (4 s) ----------------
+    if (now - lastSensorSend >= SENSOR_INTERVAL) {
+        lastSensorSend = now;
+
+        readDHTs();
+        readWaterTemperature();
+
+        if (fbStarted && Firebase.ready()) {
+            sendSensorData();
+            flushLogs();
+        }
+
+        printSystemStatus();
+    }
+}
+
+
+// ============================================================
+// WIFI / FIREBASE / TIME  (all non-blocking)
+// ============================================================
+
+// Keeps WiFi alive. If the connection drops it retries the current network
+// for WIFI_TRY_MS, then switches to the next one, and keeps cycling.
+void wifiMaintain() {
+    unsigned long now = millis();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        if (wifiTrying) {
+            Serial.printf("WiFi connected to \"%s\". IP: ", WIFI_SSIDS[wifiIdx]);
+            Serial.println(WiFi.localIP());
+            wifiTrying = false;
+        }
+        return;
+    }
+
+    if (!wifiTrying) {
+        wifiTrying = true;
+        wifiAttemptStart = now;
+        WiFi.disconnect();
+        WiFi.begin(WIFI_SSIDS[wifiIdx], WIFI_PASSWORDS[wifiIdx]);
+        Serial.printf("WiFi not connected. Trying \"%s\"...\n", WIFI_SSIDS[wifiIdx]);
+        return;
+    }
+
+    if (now - wifiAttemptStart >= WIFI_TRY_MS) {
+        wifiIdx = (wifiIdx + 1) % WIFI_COUNT;
+        wifiAttemptStart = now;
+        WiFi.disconnect();
+        WiFi.begin(WIFI_SSIDS[wifiIdx], WIFI_PASSWORDS[wifiIdx]);
+        Serial.printf("Switching to \"%s\"...\n", WIFI_SSIDS[wifiIdx]);
+    }
+}
+
+// Once WiFi is up: start NTP, then keep trying Firebase sign-in every
+// FB_RETRY_MS (5 s) until it works (covers offline boots and networks with no
+// internet at first). Then clean the legacy nodes once.
+void netMaintain() {
+    if (WiFi.status() != WL_CONNECTED) return;
+
+    unsigned long now = millis();
+
+    if (!ntpConfigured) {
+        configTime(0, 0, "pool.ntp.org", "time.nist.gov");   // UTC epoch
+        ntpConfigured = true;
+        Serial.println("NTP time sync started.");
+    }
+
+    if (!fbStarted && (lastFbTry == 0 || now - lastFbTry >= FB_RETRY_MS)) {
+        lastFbTry = now;
+
+        config.api_key = API_KEY;
+        config.database_url = DATABASE_URL;
+
+        if (Firebase.signUp(&config, &auth, "", "")) {
+            Firebase.begin(&config, &auth);
+            Firebase.reconnectWiFi(false);
+            fbStarted = true;
+            Serial.println("Firebase sign-in OK.");
+        } else {
+            Serial.printf("Firebase sign-in failed: %s (retrying)\n",
+                          config.signer.signupError.message.c_str());
+        }
+    }
+
+#if CLEAN_LEGACY_ON_BOOT
+    if (fbStarted && !legacyCleaned && Firebase.ready()) {
+        cleanLegacy();
+        legacyCleaned = true;
+    }
+#endif
+}
+
+uint64_t nowEpochMs() {
+    time_t t = time(nullptr);
+    if (t < 1700000000) return 0;
+    return (uint64_t) t * 1000ULL;
+}
+
+// Removes leftovers of the old 3-zone / 3-valve layout.
+void cleanLegacy() {
+    const char *old[] = {
+            "/controls/zone2Command", "/controls/zone3Command",
+            "/sensor/zone3",
+            "/sensor/temperature", "/sensor/humidity", "/sensor/heatIndex",
+            "/sensor/fanRunning", "/sensor/peltierRunning",
+            "/sensor/pumpRunning", "/sensor/coolingRunning", "/sensor/fansRunning"
+    };
+    for (unsigned i = 0; i < sizeof(old) / sizeof(old[0]); i++)
+        Firebase.RTDB.deleteNode(&fbdo, old[i]);
+
+#if !ZONE2_INSTALLED
+    Firebase.RTDB.deleteNode(&fbdo, "/sensor/zone2");
+    Firebase.RTDB.deleteNode(&fbdo, "/sensor/heatIndexDiff");
+#endif
+
+    Serial.println("Legacy Firebase nodes cleaned.");
+}
+
+
+// ============================================================
+// SENSORS
+// ============================================================
+
+// Reads BOTH DHT22s back-to-back so zone 1 and zone 2 are in sync.
+void readDHTs() {
+    lastDhtRead = millis();
+
+    for (int i = 0; i < NZONES; i++) {
+        float h = dhts[i]->readHumidity();
+        float t = dhts[i]->readTemperature();
+
+        bool invalid = isnan(h) || isnan(t) ||
+                       (h == 0.0 && t == 0.0) ||
+                       h < 0.0 || h > 100.0 ||
+                       t < -40.0 || t > 80.0;
+
+        float hi = 0;
+        if (!invalid) {
+            hi = dhts[i]->computeHeatIndex(t, h, false);
+            if (isnan(hi) || hi < -40.0 || hi > 90.0) invalid = true;
+        }
+
+        if (invalid) {
+            zones[i].failCount++;
+            zones[i].highCount = 0;
+
+            if (zones[i].failCount >= DHT_MAX_FAILS) {
+                zones[i].sensorOk = false;
+                zones[i].temperature = 0;
+                zones[i].humidity = 0;
+                zones[i].heatIndex = 0;
+            }
+            continue;
+        }
+
+        zones[i].failCount = 0;
+        zones[i].sensorOk = true;
+        zones[i].temperature = t;
+        zones[i].humidity = h;
+        zones[i].heatIndex = hi;
+
+        if (hi >= MIST_START_HI) zones[i].highCount++;
+        else zones[i].highCount = 0;
+    }
+}
+
+void readWaterTemperature() {
+    waterSensor.requestTemperatures();
+    float temp = waterSensor.getTempCByIndex(0);
+
+    if (temp == DEVICE_DISCONNECTED_C || temp <= -100) {
+        waterTemperature = -127;
+        waterTemperatureCondition = "NO SENSOR";
+        return;
+    }
+
+    waterTemperature = temp;
+    waterTemperatureCondition = getWaterTemperatureCondition(temp);
+}
+
+String getWaterTemperatureCondition(float temp) {
+    if (temp < 20.0) return "VERY COLD";
+    if (temp < 25.0) return "COLD";
+    if (temp < 30.0) return "WARM";
+    return "HOT";
+}
+
+// Float switch: HIGH = water present, LOW = tank empty.
+//  - water present  -> waterAvailable = true at once
+//  - tank empty and pump idle    -> blocked after LOW_READS_IDLE read(s)
+//  - tank empty and pump running -> cut after LOW_READS_RUNNING reads (anti-slosh)
+void readWaterLevel() {
+    bool high = (digitalRead(FLOAT_PIN) == HIGH);
+
+    if (high) {
+        waterAvailable = true;
+        lowCount = 0;
+    } else {
+        if (lowCount < 255) lowCount++;
+
+        int needed = (misting || pumpRunning) ? LOW_READS_RUNNING : LOW_READS_IDLE;
+        if (lowCount >= needed) waterAvailable = false;
+    }
+
+#if FLOAT_FULL_PIN >= 0
+    tankFull = (digitalRead(FLOAT_FULL_PIN) == HIGH);
+#else
+    tankFull = waterAvailable;
+#endif
+
+    static bool lastWA = true;
+    if (waterAvailable != lastWA) {
+        Serial.printf("WATER %s at %lu ms\n", waterAvailable ? "OK" : "LOW (pump blocked)",
+                      millis());
+        lastWA = waterAvailable;
+    }
+}
+
+
+// ============================================================
+// FIREBASE CONTROLS
+// /controls/mode          "AUTO" | "MANUAL"
+// /controls/zone1Command  "ON" | "OFF"   (MANUAL mode)
+// ============================================================
+
+void readFastControls() {
+    if (!Firebase.RTDB.getJSON(&fbdo, "/controls"))
+        return;
+
+    FirebaseJson &json = fbdo.jsonObject();
+    FirebaseJsonData d;
+
+    if (json.get(d, "mode")) {
+        systemMode = d.stringValue;
+        systemMode.toUpperCase();
+    }
+
+    if (json.get(d, "zone1Command")) {
+        mistCommand = d.stringValue;
+        mistCommand.toUpperCase();
+    }
+
+    lastControlOk = millis();
+}
+
+
+// ============================================================
+// CONTROL
+// ============================================================
+
+void controlSystem() {
+    if (systemMode != lastMode) {
+        if (misting) stopMist("MODE_CHANGE");
+        lastMode = systemMode;
+    }
+
+    controlMisting();      // decides start/stop; outputs are handled by outputTask()
+}
+
+// Runs every 50 ms, independent of WiFi/Firebase.
+void outputTask(void *param) {
+    for (;;) {
+        controlCooling();
+        applyOutputs();
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
+// Only zone 1 (the misted zone) decides. Zone 2 is just recorded.
+void controlMisting() {
+    Zone &z = zones[0];
+    bool commsLost = (millis() - lastControlOk > COMMS_TIMEOUT);
+
+    bool want = misting;
+    const char *reason = "";
+
+    if (!waterAvailable) {
+        // empty tank: never start, and stop if running
+        want = false;
+        reason = "TANK_LOW";
+    } else if (systemMode == "MANUAL") {
+#if MANUAL_STOP_ON_COMMS_LOSS
+        want = (!commsLost && mistCommand == "ON");
+        reason = commsLost ? "COMMS_LOST" : "MANUAL_STOP";
+#else
+        want = (mistCommand == "ON");
+        reason = "MANUAL_STOP";
+#endif
+    } else   // AUTO (works with or without WiFi)
+    {
+        if (!z.sensorOk) {
+            want = false;
+            reason = "SENSOR_FAIL";
+        } else if (!misting && z.highCount >= 2)          // 2 good reads in a row (~8 s)
+        {
+            want = true;
+        } else if (misting && z.heatIndex <= MIST_STOP_HI) {
+            want = false;
+            reason = "TARGET_REACHED";
+        }
+    }
+
+    if (want && !misting) startMist();
+    else if (!want && misting) stopMist(reason);
+}
+
+// Peltiers + fans: start at COOL_START_C, stop at COOL_STOP_C. The same rule
+// applies during misting when COOL_DURING_MIST is 1 (see settings).
+void controlCooling() {
+    unsigned long now = millis();
+    bool sensorGood = (waterTemperature > -100);
+
+    if (now - coolWindowStart >= 24UL * 60UL * 60UL * 1000UL) {
+        coolWindowStart = now;
+        coolBudgetUsedMs = 0;
+    }
+    if (coolingRunning) coolBudgetUsedMs += (now - coolLastTick);
+    coolLastTick = now;
+    bool budgetLeft = (coolBudgetUsedMs < COOL_DAILY_BUDGET_MS);
+
+    // With COOL_DURING_MIST = 1 the same start/stop thresholds are used whether
+    // the pump is running or not. With 0, the pump always has priority.
+    bool blockForMist = false;
+#if !COOL_DURING_MIST
+    blockForMist = (misting || pumpRunning);
+#endif
+
+    if (blockForMist || !waterAvailable || !sensorGood) {
+        if (coolingRunning) {
+            coolingRunning = false;
+            coolRestUntil = now + COOL_REST_MS;
+        }
+        return;
+    }
+
+    if (coolingRunning) {
+        if (waterTemperature <= COOL_STOP_C || !budgetLeft ||
+            now - coolStartMs >= COOL_MAX_ON_MS) {
+            coolingRunning = false;
+            coolRestUntil = now + COOL_REST_MS;
+        }
+    } else {
+        bool allowed = budgetLeft && (now >= coolRestUntil);
+
+        if (allowed && waterTemperature >= COOL_START_C) {
+            coolingRunning = true;
+            coolStartMs = now;
+        }
+    }
+}
+
+// Pump pulses PUMP_ON_MS / PUMP_OFF_MS while misting.
+// Peltiers (x2, 30 A relays) and the fan relay (K2, both fans) switch together.
+// Runs inside outputTask(), so the timing stays exact.
+void applyOutputs() {
+    static bool cycling = false;
+    static unsigned long phaseStart = 0;
+
+    unsigned long now = millis();
+
+    // after a normal stop, only the current ON pulse is finished
+    if (!misting && pumpFinish && !pumpRunning) pumpFinish = false;
+
+    // no water -> the pump is never allowed to run
+    bool pumpWanted = waterAvailable && (misting || pumpFinish);
+
+    if (!pumpWanted) {
+        cycling = false;
+        pumpRunning = false;
+        pumpFinish = false;
+    } else if (PUMP_CONTINUOUS) {
+        pumpRunning = true;
+    } else if (!cycling) {
+        cycling = true;
+        pumpRunning = true;
+        phaseStart = now;
+    } else if (pumpRunning && now - phaseStart >= PUMP_ON_MS) {
+        pumpRunning = false;
+        phaseStart = now;
+        if (!misting) pumpFinish = false;     // last pulse finished
+    } else if (!pumpRunning && now - phaseStart >= PUMP_OFF_MS) {
+        pumpRunning = true;
+        phaseStart = now;
+    }
+
+    digitalWrite(PUMP_RELAY, pumpRunning ? RELAY4_ON : RELAY4_OFF);
+
+    if (coolingRunning) fanOffAt = now + FAN_RUNON_MS;
+    fansRunning = coolingRunning || (now < fanOffAt);
+
+    digitalWrite(PELTIER1_RELAY, coolingRunning ? PELT_ON : PELT_OFF);
+    digitalWrite(PELTIER2_RELAY, coolingRunning ? PELT_ON : PELT_OFF);
+    digitalWrite(FAN_RELAY, fansRunning ? RELAY4_ON : RELAY4_OFF);   // K2 on the 4-ch module
+}
+
+// ============================================================
+// MIST LOG  (/logs/m_<epochSec>)
+// ============================================================
+
+Snap snapOf(int i) {
+    Snap s;
+    s.ok = zones[i].sensorOk;
+    s.t = zones[i].temperature;
+    s.h = zones[i].humidity;
+    s.hi = zones[i].heatIndex;
+    return s;
+}
+
+// Make sure both DHT22s were read just now, so the comparison
+// values belong to the same moment.
+void snapshotRefresh() {
+    if (millis() - lastDhtRead > DHT_STALE_MS)
+        readDHTs();
+}
+
+int allocLog() {
+    for (int i = 0; i < MAX_LOGS; i++)
+        if (logs[i].state == 0) return i;
+
+    for (int i = 0; i < MAX_LOGS; i++)
+        if (logs[i].state == 2) return i;
+
+    return -1;
+}
+
+void startMist() {
+    pumpFinish = false;
+    misting = true;
+    Serial.printf("startMist: log slot %d free=%s\n", allocLog(), allocLog() >= 0 ? "yes" : "NO");
+    snapshotRefresh();
+
+    Serial.printf(">> MIST START  zone1 HI %.1f | zone2 (control) HI %.1f\n",
+                  zones[0].heatIndex, zones[1].heatIndex);
+
+    int idx = allocLog();
+    mistLogIdx = idx;
+    if (idx < 0) return;
+
+    LogEntry &e = logs[idx];
+    e = LogEntry();
+    e.state = 1;
+    e.startedAt = nowEpochMs();
+    e.startMs = millis();
+    e.mistBefore = snapOf(0);
+    e.ctrlBefore = snapOf(1);
+    strncpy(e.mode, systemMode.c_str(), sizeof(e.mode) - 1);
+}
+
+void stopMist(const char *reason) {
+#if PUMP_FINISH_PULSE
+    // normal stop: let the pump finish its current ON pulse
+    if (!PUMP_CONTINUOUS && pumpRunning && strcmp(reason, "TARGET_REACHED") == 0)
+        pumpFinish = true;
+#endif
+    misting = false;
+    snapshotRefresh();
+
+    Serial.printf(">> MIST END (%s)  zone1 HI %.1f | zone2 (control) HI %.1f\n",
+                  reason, zones[0].heatIndex, zones[1].heatIndex);
+
+    if (mistLogIdx >= 0) {
+        LogEntry &e = logs[mistLogIdx];
+
+        if (e.state == 1) {
+            e.state = 2;
+            e.endedAt = nowEpochMs();
+            e.endMs = millis();
+            e.durationSec = (e.endMs - e.startMs) / 1000;
+            e.mistAfter = snapOf(0);
+            e.ctrlAfter = snapOf(1);
+            strncpy(e.reason, reason, sizeof(e.reason) - 1);
+        }
+    }
+
+    mistLogIdx = -1;
+}
+
+void addSnap(FirebaseJson &j, const String &prefix, const Snap &s) {
+    if (!s.ok) return;
+    j.set(prefix + "temperature", s.t);
+    j.set(prefix + "humidity", s.h);
+    j.set(prefix + "heatIndex", s.hi);
+}
+
+void flushLogs() {
+    int budget = 3;
+
+    for (int i = 0; i < MAX_LOGS && budget > 0; i++) {
+        LogEntry &e = logs[i];
+        if (e.state == 0) continue;
+        if (e.state == 1 && e.startUploaded) continue;
+
+        // clock was not synced when it happened -> rebuild timestamps now
+        // clock was not synced when it happened -> rebuild timestamps now
+        uint64_t n = nowEpochMs();
+        if (n) {
+            if (!e.startedAt) e.startedAt = n - (uint64_t)(millis() - e.startMs);
+            if (e.state == 2 && !e.endedAt) e.endedAt = n - (uint64_t)(millis() - e.endMs);
+        }
+
+        if (e.key[0] == 0) {
+            if (e.startedAt)
+                snprintf(e.key, sizeof(e.key), "m_%lu", (unsigned long) (e.startedAt / 1000));
+            else snprintf(e.key, sizeof(e.key), "m_u%lu", e.startMs);
+        }
+
+        FirebaseJson j;
+        if (e.startedAt) j.set("startedAt", (double) e.startedAt);
+        j.set("mode", e.mode);
+
+        addSnap(j, "before/mist/", e.mistBefore);
+        addSnap(j, "before/control/", e.ctrlBefore);
+
+        if (e.state == 1) {
+            j.set("status", "RUNNING");
+        } else {
+            if (e.endedAt) j.set("endedAt", (double) e.endedAt);
+            j.set("durationSec", (double) e.durationSec);
+            j.set("status", "DONE");
+            j.set("stopReason", e.reason);
+
+            addSnap(j, "after/mist/", e.mistAfter);
+            addSnap(j, "after/control/", e.ctrlAfter);
+
+            // comparison (only when all 4 readings are valid)
+            if (e.mistBefore.ok && e.ctrlBefore.ok && e.mistAfter.ok && e.ctrlAfter.ok) {
+                float mistDrop = e.mistBefore.hi - e.mistAfter.hi;   // + = cooled down
+                float ctrlDrop = e.ctrlBefore.hi - e.ctrlAfter.hi;
+                j.set("comparison/mistHeatIndexDrop", mistDrop);
+                j.set("comparison/controlHeatIndexDrop", ctrlDrop);
+                j.set("comparison/extraCoolingFromMist", mistDrop - ctrlDrop);
+                j.set("comparison/heatIndexGapAfter", e.ctrlAfter.hi - e.mistAfter.hi);
+            }
+        }
+
+        budget--;
+
+        if (Firebase.RTDB.setJSON(&fbdo, String("/logs/") + e.key, &j)) {
+            Serial.printf("LOG UPLOADED: %s (%s)\n", e.key, e.state == 2 ? "DONE" : "RUNNING");
+            if (e.state == 2) e.state = 0;
+            else e.startUploaded = true;
+        } else {
+            Serial.printf("LOG UPLOAD FAILED: %s -> %s\n", e.key, fbdo.errorReason().c_str());
+            return;   // offline -> retry next pass
+        }
+    }
+}
+
+int pendingLogs() {
+    int n = 0;
+    for (int i = 0; i < MAX_LOGS; i++)
+        if (logs[i].state == 2) n++;
+    return n;
+}
+
+
+// ============================================================
+// SEND LIVE DATA TO FIREBASE  (/sensor, /status)
+// ============================================================
+
+void sendSensorData() {
+    FirebaseJson s;
+
+    s.set("waterAvailable", waterAvailable);
+    s.set("tankFull", tankFull);
+    s.set("waterTemperature", waterTemperature);
+    s.set("waterTemperatureCondition", waterTemperatureCondition);
+
+    s.set("devices/pump", pumpRunning);
+    s.set("devices/peltier1", coolingRunning);
+    s.set("devices/peltier2", coolingRunning);
+    s.set("devices/fan1", fansRunning);
+    s.set("devices/fan2", fansRunning);
+
+    s.set("systemOk", zones[0].sensorOk && (!ZONE2_INSTALLED || zones[1].sensorOk));
+
+    // zone 1 = misted
+    s.set("zone1/temperature", zones[0].temperature);
+    s.set("zone1/humidity", zones[0].humidity);
+    s.set("zone1/heatIndex", zones[0].heatIndex);
+    s.set("zone1/sensorOk", zones[0].sensorOk);
+    s.set("zone1/mistingStatus", misting ? "ON" : "OFF");
+
+#if ZONE2_INSTALLED
+    // zone 2 = control (no misting)
+    s.set("zone2/temperature", zones[1].temperature);
+    s.set("zone2/humidity", zones[1].humidity);
+    s.set("zone2/heatIndex", zones[1].heatIndex);
+    s.set("zone2/sensorOk", zones[1].sensorOk);
+
+    if (zones[0].sensorOk && zones[1].sensorOk)
+        s.set("heatIndexDiff", zones[1].heatIndex - zones[0].heatIndex);
+#endif
+
+    Firebase.RTDB.updateNode(&fbdo, "/sensor", &s);
+    Firebase.RTDB.setTimestamp(&fbdo, "/sensor/lastUpdate");
+
+    FirebaseJson st;
+    st.set("activeMode", systemMode);
+    st.set("zone2Installed", (bool) ZONE2_INSTALLED);
+    st.set("wifi", WiFi.status() == WL_CONNECTED ? "CONNECTED" : "DISCONNECTED");
+    st.set("thresholds/start", MIST_START_HI);
+    st.set("thresholds/stop", MIST_STOP_HI);
+
+    Firebase.RTDB.updateNode(&fbdo, "/status", &st);
+}
+
+
+// ============================================================
+// SERIAL STATUS
+// ============================================================
+
+void printSystemStatus() {
+    Serial.println();
+    Serial.println("----------------------------------------");
+    Serial.printf("Mode: %s  Tank: %s  Pump: %s  WiFi: %s  Firebase: %s  Pending logs: %d\n",
+                  systemMode.c_str(),
+                  waterAvailable ? "OK" : "LOW",
+                  pumpRunning ? "ON" : "OFF",
+                  WiFi.status() == WL_CONNECTED ? WIFI_SSIDS[wifiIdx] : "OFFLINE",
+                  (fbStarted && Firebase.ready()) ? "READY" : "NOT READY",
+                  pendingLogs());
+
+    const char *names[2] = {"Zone 1 (MIST)   ", "Zone 2 (CONTROL)"};
+    for (int i = 0; i < NZONES; i++) {
+        if (zones[i].sensorOk)
+            Serial.printf("%s: %.1fC  %.1f%%  HI %.1f%s\n",
+                          names[i], zones[i].temperature, zones[i].humidity, zones[i].heatIndex,
+                          i == 0 ? (misting ? "  mist ON" : "  mist OFF") : "");
+        else
+            Serial.printf("%s: SENSOR FAIL\n", names[i]);
+    }
+
+    if (waterTemperature > -100)
+        Serial.printf("Water: %.2fC (%s)  Peltiers: %s  Fans: %s\n",
+                      waterTemperature, waterTemperatureCondition.c_str(),
+                      coolingRunning ? "ON" : "OFF",
+                      fansRunning ? "ON" : "OFF");
+    else
+        Serial.println("Water: NO SENSOR  Peltiers: OFF  Fans: OFF");
+
+    Serial.println("----------------------------------------");
+}
