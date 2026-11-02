@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:smartmist_app/pages/welcome_pg.dart';
 import 'package:smartmist_app/theme/theme.dart';
 import 'package:smartmist_app/services/notification_service.dart';
-import 'package:smartmist_app/services/heat_warning_service.dart'; // ADD THIS IMPORT
+import 'package:smartmist_app/services/heat_warning_service.dart';
 
 import 'firebase_options.dart';
 
@@ -12,6 +13,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  try {
+    if (FirebaseAuth.instance.currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously();
+    }
+  } catch (e) {
+    debugPrint("Anonymous sign-in failed: $e");
+  }
 
   await NotificationService.init();
 

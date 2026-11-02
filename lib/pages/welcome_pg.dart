@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:smartmist_app/pages/dashboard.dart';
-import 'package:smartmist_app/pages/signin_pg.dart';
 import 'package:smartmist_app/widgets/app_notifications.dart';
 import 'package:smartmist_app/widgets/custom_scaffold.dart';
 import 'package:smartmist_app/widgets/welcome_btn.dart';
@@ -95,7 +94,7 @@ class WelcomeScreen extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Choose how you would like to continue',
+                        'Tap below to get started',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
                           fontSize: width * 0.038,
@@ -119,42 +118,17 @@ class WelcomeScreen extends StatelessWidget {
                             Future.delayed(
                               const Duration(milliseconds: 500),
                               () {
+                                if (!context.mounted) return;
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) =>
-                                        const Dashboard(isAdmin: false),
+                                    builder: (context) => const Dashboard(),
                                   ),
                                 );
                               },
                             );
                           },
                           color: const Color(0xFFF0F4F8),
-                          textColor: const Color(0xFF07111F),
-                        ),
-                      ),
-                      SizedBox(height: height * 0.018),
-                      SizedBox(
-                        width: double.infinity,
-                        child: WelcomeBtn(
-                          btnText: 'Personnel Login',
-                          icon: CupertinoIcons
-                              .person_crop_circle_fill_badge_checkmark,
-                          onTap: () {
-                            AppNotification.show(
-                              context,
-                              "Please sign in to continue",
-                              icon: CupertinoIcons.person_crop_circle,
-                            );
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const SignInScreen(),
-                              ),
-                            );
-                          },
-                          color: Colors.white,
                           textColor: const Color(0xFF07111F),
                         ),
                       ),

@@ -88,22 +88,29 @@ class _ForecastPageState extends State<ForecastPage> {
   }
 
   void _listenToSensor() {
-    _sensorSub = _sensorRef.onValue.listen(
-      (event) {
-        final data = event.snapshot.value;
+    _sensorSub = _sensorRef.onValue.listen((event) {
+      final data = event.snapshot.value;
+      if (data is! Map || !mounted) return;
 
-        if (data is Map) {
-          setState(() {
-            liveTemp = (data['temperature'] as num?)?.toDouble();
-            liveHumidity = (data['humidity'] as num?)?.toDouble();
-            liveHeatIndex = (data['heatIndex'] as num?)?.toDouble();
-          });
-        }
-      },
-      onError: (error) {
-        debugPrint("Sensor stream error: $error");
-      },
-    );
+      final zones = ['zone1', 'zone2', 'zone3']
+          .map((k) => data[k])
+          .whereType<Map>()
+          .where((z) => z['sensorOk'] == true)
+          .toList();
+
+      double? avg(String field) => zones.isEmpty
+          ? null
+          : zones
+                    .map((z) => (z[field] as num).toDouble())
+                    .reduce((a, b) => a + b) /
+                zones.length;
+
+      setState(() {
+        liveTemp = avg('temperature');
+        liveHumidity = avg('humidity');
+        liveHeatIndex = avg('heatIndex');
+      });
+    }, onError: (error) => debugPrint("Sensor stream error: $error"));
   }
 
   bool _isThunderCode(int c) => c == 95 || c == 96 || c == 99;

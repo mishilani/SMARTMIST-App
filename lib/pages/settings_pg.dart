@@ -1,15 +1,12 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:smartmist_app/pages/heat_threshold_pg.dart';
 import 'package:smartmist_app/pages/misting_threshold_pg.dart';
 import 'package:smartmist_app/pages/water_management_pg.dart';
 import 'package:smartmist_app/widgets/dashboard_scaffold.dart';
 
 class SettingsPage extends StatelessWidget {
-  final bool isAdmin;
-
-  const SettingsPage({super.key, required this.isAdmin});
+  const SettingsPage({super.key});
 
   Widget settingsCard({
     required BuildContext context,
@@ -96,7 +93,7 @@ class SettingsPage extends StatelessWidget {
 
     return DashboardScaffold(
       title: "System Settings",
-      subtitle: "Configure SMARTMIST parameters",
+      subtitle: "Control SMARTMIST operation",
       child: ListView(
         padding: EdgeInsets.symmetric(
           horizontal: width * 0.045,
@@ -106,16 +103,14 @@ class SettingsPage extends StatelessWidget {
           SizedBox(height: height * 0.015),
           settingsCard(
             context: context,
-            icon: CupertinoIcons.drop_fill,
-            title: "Misting Threshold",
-            subtitle: isAdmin
-                ? "Adjust mist activation mode"
-                : "View mist activation settings",
+            icon: CupertinoIcons.slider_horizontal_3,
+            title: "Controls",
+            subtitle: "Auto / Manual mode, zones, misting trigger and status",
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => MistingThresholdPage(isAdmin: isAdmin),
+                  builder: (context) => const MistingControlPage(),
                 ),
               );
             },
@@ -123,45 +118,17 @@ class SettingsPage extends StatelessWidget {
           settingsCard(
             context: context,
             icon: CupertinoIcons.thermometer,
-            title: "Heat Index Threshold",
-            subtitle: isAdmin
-                ? "Adjust heat index levels"
-                : "View heat index settings",
+            title: "Water Management",
+            subtitle: "View water level, temperature, and cooling status",
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => HeatThresholdPage(isAdmin: isAdmin),
+                  builder: (context) => const WaterManagementPage(),
                 ),
               );
             },
           ),
-          settingsCard(
-            context: context,
-            icon: CupertinoIcons.drop_fill,
-            title: "Water Cooling System",
-            subtitle: isAdmin
-                ? "Manage water temperature and Peltier"
-                : "View water level, temperature, and cooling status",
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => WaterManagementPage(isAdmin: isAdmin),
-                ),
-              );
-            },
-          ),
-          if (!isAdmin)
-            settingsCard(
-              context: context,
-              icon: CupertinoIcons.arrow_right_square,
-              title: "Go to Welcome Page",
-              subtitle: "Return to main page",
-              onTap: () {
-                Navigator.popUntil(context, (route) => route.isFirst);
-              },
-            ),
         ],
       ),
     );

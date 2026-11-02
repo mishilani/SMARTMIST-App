@@ -5,28 +5,26 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:smartmist_app/widgets/app_notifications.dart';
 import 'package:smartmist_app/widgets/dashboard_scaffold.dart';
 import 'package:smartmist_app/widgets/section_card.dart';
-import 'package:smartmist_app/widgets/status_card.dart';
 import 'package:smartmist_app/widgets/animated_water_tank.dart';
 import 'dart:async';
 import 'package:smartmist_app/services/notification_service.dart';
 
 class WaterManagementPage extends StatefulWidget {
-  final bool isAdmin;
-
-  const WaterManagementPage({super.key, required this.isAdmin});
+  const WaterManagementPage({super.key});
 
   @override
   State<WaterManagementPage> createState() => _WaterManagementPageState();
 }
 
 class _WaterManagementPageState extends State<WaterManagementPage> {
-  final DatabaseReference db = FirebaseDatabase.instance.ref();
+  static const double coolStartTemp = 28;
+
+  final DatabaseReference db = FirebaseDatabase.instance.ref("sensor");
 
   bool waterAvailable = false;
   double? waterTemp;
-  double peltierThreshold = 30;
+  bool coolingRunning = false;
 
-  bool peltierOn = false;
   bool? _previousWaterAvailable;
   StreamSubscription<DatabaseEvent>? _waterSubscription;
 
@@ -47,19 +45,9 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
       final value = event.snapshot.value;
 
       if (value != null && value is Map) {
-        final data = Map<Object?, Object?>.from(value);
+        final sensor = Map<Object?, Object?>.from(value);
 
-        final sensor = Map<Object?, Object?>.from(
-          (data["sensor"] as Map?) ?? {},
-        );
-
-        final status = Map<Object?, Object?>.from(
-          (data["status"] as Map?) ?? {},
-        );
-
-        final controls = Map<Object?, Object?>.from(
-          (data["controls"] as Map?) ?? {},
-        );
+        if (!mounted) return;
 
         setState(() {
           waterAvailable = sensor["waterAvailable"] == true;
@@ -71,13 +59,10 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
               ? null
               : rawWaterTemp;
 
-          peltierOn = status["peltier"] == true;
-
-          peltierThreshold =
-              double.tryParse(
-                controls["peltierThreshold"]?.toString() ?? "30",
-              ) ??
-              30;
+          final devices = sensor["devices"];
+          coolingRunning =
+              devices is Map &&
+              (devices["peltier1"] == true || devices["peltier2"] == true);
         });
 
         _checkLowWaterAlert();
@@ -125,7 +110,7 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
     if (waterTemp == null) {
       return "No Sensor";
     }
-    if (waterTemp! >= peltierThreshold) {
+    if (waterTemp! >= coolStartTemp) {
       return "Cooling Required";
     }
     return "Normal Temperature";
@@ -135,21 +120,10 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
     if (waterTemp == null) {
       return Colors.white70;
     }
-    if (waterTemp! >= peltierThreshold) {
+    if (waterTemp! >= coolStartTemp) {
       return Colors.orangeAccent;
     }
     return Colors.greenAccent;
-  }
-
-  bool getDisplayedPeltierOn() {
-    if (waterTemp == null) {
-      return peltierOn;
-    }
-    final waterIsColdEnough = waterTemp! < peltierThreshold;
-    if (!waterIsColdEnough) {
-      return true;
-    }
-    return peltierOn;
   }
 
   @override
@@ -157,7 +131,6 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
     final size = MediaQuery.of(context).size;
     final width = size.width;
     final height = size.height;
-    final displayedPeltierOn = getDisplayedPeltierOn();
 
     return DashboardScaffold(
       title: "Water Management",
@@ -171,22 +144,6 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
               padding: EdgeInsets.symmetric(vertical: height * 0.008),
               child: Column(
                 children: [
-                  StatusCard(
-                    title: widget.isAdmin
-                        ? "Administrator Access"
-                        : "Viewer Mode",
-                    icon: widget.isAdmin
-                        ? CupertinoIcons.person_crop_circle_badge_checkmark
-                        : CupertinoIcons.lock_fill,
-                    value: widget.isAdmin ? "CONTROL ENABLED" : "READ ONLY",
-                    label: widget.isAdmin
-                        ? "Can manage water system"
-                        : "Monitoring only",
-                    color: widget.isAdmin
-                        ? Colors.greenAccent
-                        : Colors.orangeAccent,
-                  ),
-                  SizedBox(height: height * 0.012),
                   SectionCard(
                     color: const Color(0xFF01579B).withValues(alpha: 0.35),
                     icon: CupertinoIcons.drop_fill,
@@ -255,7 +212,7 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
                                   Text(
                                     waterTemp == null
                                         ? "--°C"
-                                        : "${waterTemp!.toInt()}°C",
+                                        : "${waterTemp!.toStringAsFixed(1)}°C",
                                     style: GoogleFonts.poppins(
                                       color: Colors.white,
                                       fontSize: width * 0.065,
@@ -289,7 +246,7 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
-                                    displayedPeltierOn ? "ON" : "OFF",
+                                    coolingRunning ? "ON" : "OFF",
                                     style: GoogleFonts.poppins(
                                       color: Colors.white,
                                       fontSize: width * 0.065,
@@ -297,7 +254,7 @@ class _WaterManagementPageState extends State<WaterManagementPage> {
                                     ),
                                   ),
                                   Text(
-                                    "Threshold ${peltierThreshold.toInt()}°C",
+                                    "Starts at ${coolStartTemp.toInt()}°C",
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
                                       color: Colors.white70,

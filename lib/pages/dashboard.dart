@@ -3,14 +3,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'activity_log_pg.dart';
+import 'controls_pg.dart';
 import 'forecast_pg.dart';
-import 'profile_pg.dart';
 import 'settings_pg.dart';
 
 class Dashboard extends StatefulWidget {
-  final bool isAdmin;
-
-  const Dashboard({super.key, required this.isAdmin});
+  const Dashboard({super.key});
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -19,18 +17,17 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   int currentIndex = 0;
 
-  late List<Widget> pages;
+  final List<Widget> pages = [
+    const ForecastPage(),
+    const ActivitylogsPage(),
+    const SettingsPage(),
+  ];
 
-  @override
-  void initState() {
-    super.initState();
-    pages = [
-      const ForecastPage(),
-      ActivitylogsPage(isAdmin: widget.isAdmin),
-      SettingsPage(isAdmin: widget.isAdmin),
-      if (widget.isAdmin) ProfilePage(isAdmin: widget.isAdmin),
-    ];
-  }
+  static const List<Map<String, Object>> navItems = [
+    {"icon": CupertinoIcons.cloud_sun, "label": "Forecast"},
+    {"icon": CupertinoIcons.clock, "label": "Logs"},
+    {"icon": CupertinoIcons.gear, "label": "Settings"},
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +43,8 @@ class _DashboardState extends State<Dashboard> {
             end: Alignment.bottomCenter,
           ),
         ),
-        child: pages[currentIndex],
+
+        child: IndexedStack(index: currentIndex, children: pages),
       ),
       bottomNavigationBar: buildNavigation(size.width, size.height),
     );
@@ -55,13 +53,6 @@ class _DashboardState extends State<Dashboard> {
   Widget buildNavigation(double width, double height) {
     final navHeight = height * 0.075;
     final navMargin = height * 0.035;
-
-    final navItems = [
-      {"icon": CupertinoIcons.cloud_sun, "label": "Forecast"},
-      {"icon": CupertinoIcons.clock, "label": "Logs"},
-      {"icon": CupertinoIcons.gear, "label": "Settings"},
-      if (widget.isAdmin) {"icon": CupertinoIcons.person, "label": "Profile"},
-    ];
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(30),
@@ -100,7 +91,7 @@ class _DashboardState extends State<Dashboard> {
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeOut,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
+                    horizontal: 8,
                     vertical: 5,
                   ),
                   child: Column(

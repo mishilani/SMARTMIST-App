@@ -283,10 +283,8 @@ class _Next7daysPageState extends State<Next7daysPage> {
   }
 
   double calculatedHeatIndex(double tempC, int humidity) {
-    // Convert Celsius to Fahrenheit
     double tempF = (tempC * 9 / 5) + 32;
 
-    // NOAA Heat Index Formula
     double heatIndexF =
         -42.379 +
         2.04901523 * tempF +
